@@ -142,6 +142,7 @@ for (let turn=0; turn<90; turn++) {
   }
 }
 assert.equal(f1Seen.size,810);
+assert.ok(f1Patterns.slice(50,100).some((pattern,i)=>pattern!==f1Patterns[i]),"construction order does not repeat a fixed 50-question cycle");
 assert.equal(run('unusedQuestionCount()'),190);
 run('changeForm(2);');
 assert.equal(run('selectedForm()'),1,'cannot switch during a session');

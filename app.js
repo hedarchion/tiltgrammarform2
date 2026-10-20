@@ -1438,12 +1438,11 @@ function pickQuestion(excluded, excludedTopics) {
   if (outsideRound.length) candidates = outsideRound;
   const bankById = new Map(selectedBank().map(question => [question.id, question]));
   const history = (cls.usedQuestionIds || []).map(id => bankById.get(id)).filter(Boolean);
-  const topicCounts = new Map(), patternCounts = new Map(), lastPattern = new Map();
-  history.forEach((question, index) => {
+  const topicCounts = new Map(), patternCounts = new Map();
+  history.forEach(question => {
     const pattern = questionPattern(question);
     topicCounts.set(question.topic, (topicCounts.get(question.topic) || 0) + 1);
     patternCounts.set(pattern, (patternCounts.get(pattern) || 0) + 1);
-    lastPattern.set(pattern, index);
   });
   // A name change is still the same construction: keep it out of the next 24 slots.
   const recentPatterns = new Set(history.slice(-24).map(questionPattern));
@@ -1455,8 +1454,7 @@ function pickQuestion(excluded, excludedTopics) {
   // Least-used topics first; then rotate through constructions within each topic.
   // Deck order breaks ties randomly, so classes do not repeat a fixed topic cycle.
   candidates.sort((a, b) => (topicCounts.get(a.topic) || 0) - (topicCounts.get(b.topic) || 0)
-    || (patternCounts.get(questionPattern(a)) || 0) - (patternCounts.get(questionPattern(b)) || 0)
-    || (lastPattern.get(questionPattern(a)) ?? -1) - (lastPattern.get(questionPattern(b)) ?? -1));
+    || (patternCounts.get(questionPattern(a)) || 0) - (patternCounts.get(questionPattern(b)) || 0));
   if (!candidates.length) return null;
   const index = session.questionDeck.indexOf(candidates[0]);
   const question = session.questionDeck.splice(index, 1)[0];
