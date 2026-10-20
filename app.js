@@ -5,14 +5,16 @@ const STORAGE_KEY = "grammartilt_v2";
 const MODEL_URL = "models";
 const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
 const FORM1_BANK = Array.isArray(window.BANK_FORM1) ? window.BANK_FORM1 : [];
-function selectedForm(cls = getCurrentClass()) { return cls?.form === 1 ? 1 : 2; }
+function selectedForm(cls = getCurrentClass()) { return (cls ? cls.form : DB.defaultForm) === 1 ? 1 : 2; }
 function selectedBank(cls = getCurrentClass()) { return selectedForm(cls) === 1 ? FORM1_BANK : QUESTION_BANK; }
 function changeForm(value) {
   const cls = getCurrentClass();
-  if (!cls || session?.active) return;
-  const previous = cls.form;
-  cls.form = Number(value) === 1 ? 1 : 2;
-  if (!saveDB()) cls.form = previous;
+  if (session?.active) return;
+  const target = cls || DB;
+  const key = cls ? "form" : "defaultForm";
+  const previous = target[key];
+  target[key] = Number(value) === 1 ? 1 : 2;
+  if (!saveDB()) target[key] = previous;
   refreshAll();
 }
 const TRACKING_FRESH_MS = 450;
@@ -122,6 +124,7 @@ function normalizeStudent(raw) {
 function normalizeDB(raw) {
   const db = {
     version: 5,
+    defaultForm: raw?.defaultForm === 1 ? 1 : 2,
     activeClass: null,
     classes: {},
     settings: { ...defaultSettings },
@@ -484,7 +487,7 @@ function updateSessionHud() {
       : `ROUNDS ${session.rounds}`;
   }
   $("classSelect").disabled = active;
-  $("formSelect").disabled = active || !getCurrentClass();
+  $("formSelect").disabled = active;
   $("newClassBtn").disabled = active;
   $("createClassBtn").disabled = active;
   $("startSessionBtn").disabled = active || !getCurrentClass();
@@ -969,7 +972,7 @@ function drawPlayerPreview() {
 function renderLobby() {
   const cls = getCurrentClass();
   $("formSelect").value = String(selectedForm());
-  $("formSelect").disabled = Boolean(session?.active) || !cls;
+  $("formSelect").disabled = Boolean(session?.active);
   $("lobbyClassName").textContent = cls ? cls.name : "No class yet";
   $("quickCreate").classList.toggle("hidden", Boolean(cls));
   $("lobbyRoster").innerHTML = "";
@@ -1082,7 +1085,7 @@ function createClass(name) {
     toast("Give the class a name first.", "warn");
     return null;
   }
-  const cls = { id: makeId("class"), name: clean, createdAt: Date.now(), students: [], usedQuestionIds: [] };
+  const cls = { id: makeId("class"), name: clean, form: selectedForm(), createdAt: Date.now(), students: [], usedQuestionIds: [] };
   DB.classes[cls.id] = cls;
   DB.activeClass = cls.id;
   saveDB();

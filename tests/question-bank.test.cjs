@@ -138,3 +138,13 @@ assert.equal(run('unusedQuestionCount()'),999,'Form 2 history remains intact');
 run('getCurrentClass().form=1; saveDB(); DB=loadDB();');
 assert.equal(run('unusedQuestionCount()'),190,'Form 1 history persists across reloads');
 console.log('Passed: Form 1 bank structure, 90 turns and redemptions, saved form choice, session lock and independent form histories.');
+
+run('session=null; DB=normalizeDB(null); changeForm(1);');
+assert.equal(run('selectedForm()'),1,'choose Form 1 before creating a class');
+assert.equal(run('loadDB().defaultForm'),1,'pre-class choice survives reload');
+assert.equal(elements.get('formSelect').disabled,false,'selector enabled without a class');
+run('createClass("New Form 1 class");');
+assert.equal(run('getCurrentClass().form'),1,'new class inherits chosen form');
+run('changeForm(2);');
+assert.equal(run('selectedForm()'),2,'existing class can switch forms');
+console.log('Passed: choosing a form before class creation and inheriting the selection.');
