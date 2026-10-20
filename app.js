@@ -27,6 +27,10 @@ function setControlMode(value) {
   if (mode !== "tilt") clearFaceCanvas();
   saveDB();
   renderControlMode();
+  if (phase === "play" && round && !round.answered) {
+    $("feedbackLine").textContent = mode === "palms" ? "Hold one open palm in a guide, or tap an answer."
+      : mode === "tilt" && stream ? "Tilt left or right and hold." : "Tap an answer or use the left and right arrow keys.";
+  }
   if (mode === "palms" && stream) ensurePalmLoop();
 }
 function renderControlMode() {
