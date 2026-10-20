@@ -568,6 +568,8 @@ function setCameraUI() {
   document.body.classList.toggle("camera-on", live);
   document.body.classList.toggle("camera-off", !live);
   $("cameraToggleBtn").textContent = live ? "STOP CAMERA" : "ENABLE CAMERA";
+  $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
+  $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
   $("calibrateBtn").disabled = !live;
   $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
   $("optionRight").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";

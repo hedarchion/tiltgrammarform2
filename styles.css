@@ -1094,3 +1094,7 @@ body.teacher-open .drawer { transform: none; }
 
 .drawer-section > .panel-label { display:block; margin:14px 0 8px; }
 .drawer-section > .select { display:block; width:100%; min-height:46px; }
+
+.camera-control { min-height:44px; padding:10px 12px; }
+.camera-control[aria-pressed="true"] { color:var(--mint); border-color:rgba(124,255,203,.6); }
+@media (max-width:760px) { .camera-control { padding:8px; font-size:6px; } }

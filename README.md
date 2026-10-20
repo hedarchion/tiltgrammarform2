@@ -123,6 +123,8 @@ covers redemption questions. Topic coverage and exact-question non-repetition ar
 preserved. Near exhaustion, the spacing rule relaxes rather than recycling content.
 Existing question IDs and used histories remain unchanged.
 
-Grammar level, answer mode, palm timing, camera, calibration, sound, leaderboard
+Grammar level, answer mode, palm timing, calibration, sound, leaderboard
 frequency and session controls live in the Teacher Console. The player screen
 keeps large answers, hand tracking feedback and the read-only hold instruction.
+**Enable camera / Stop camera** stays in the game header; enabling it requests
+browser camera permission when needed.

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261020-variety-settings">
+  <link rel="stylesheet" href="styles.css?v=20261020-camera-control">
   <link rel="stylesheet" href="glass.css">
   <script src="vendor/face-api.min.js"></script>
   <script defer src="vendor/hands/hands.js"></script>
@@ -41,6 +41,7 @@
       </div>
 
       <div class="hud-right">
+        <button class="hud-btn camera-control" id="cameraToggleBtn" type="button" aria-pressed="false" title="Turn camera on and allow permission">ENABLE CAMERA</button>
         <button class="hud-btn" id="leaderboardBtn" type="button" title="Show leaderboard">RANKS</button>
         <button class="hud-btn" id="fullscreenBtn" type="button" title="Toggle fullscreen">FULL</button>
         <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher settings">SETTINGS</button>
@@ -148,7 +149,7 @@
           <div class="tilt-meter" id="tiltMeter">
             <div class="palm-monitor">
               <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored hand tracking preview with left and right guides"></canvas>
-              <div id="palmStatus" role="status">Enable camera in Teacher settings</div>
+              <div id="palmStatus" role="status">Use ENABLE CAMERA above for palm control</div>
               <small id="palmHoldHint">Hold 0.8s · lower hand to reset</small>
             </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
@@ -342,7 +343,6 @@
         <section class="drawer-section">
           <h3>CAMERA &amp; HEAD TRACKING</h3>
           <div class="row">
-            <button class="btn mini" id="cameraToggleBtn" type="button">ENABLE CAMERA</button>
             <button class="btn mini" id="reloadModelsBtn" type="button">RELOAD FACE ENGINE</button>
           </div>
           <p class="drawer-hint" id="cameraNote">Enable the camera for palm controls or photo cards.</p>
@@ -377,10 +377,10 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="questions.js?v=20261020-variety-settings"></script>
-  <script src="questions-form1.js?v=20261020-variety-settings"></script>
-  <script src="palm-control.js?v=20261020-variety-settings"></script>
-  <script src="app.js?v=20261020-variety-settings"></script>
+  <script src="questions.js?v=20261020-camera-control"></script>
+  <script src="questions-form1.js?v=20261020-camera-control"></script>
+  <script src="palm-control.js?v=20261020-camera-control"></script>
+  <script src="app.js?v=20261020-camera-control"></script>
   <script src="glass.js"></script>
 </body>
 </html>

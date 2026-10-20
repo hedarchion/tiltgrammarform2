@@ -3,10 +3,12 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = readFileSync('index.html', 'utf8');
 const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
-for (const id of ['formSelect','controlModeSelect','palmHold','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','cameraToggleBtn','soundToggle','musicToggle','lbEvery']) {
+for (const id of ['formSelect','controlModeSelect','palmHold','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle','lbEvery']) {
   assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
   assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
 }
+assert.ok(html.slice(0,html.indexOf('</header>')).includes('id="cameraToggleBtn"'),'camera permission/on-off remains in the game header');
+assert.equal(html.split('id="cameraToggleBtn"').length-1,1,'one shared camera toggle');
 for (const id of ['palmHoldQuick','controlModeBtn','recenterBtn','palmCameraBtn']) assert.ok(!html.includes(`id="${id}"`));
 function element(hidden = false) {
   const classes = new Set(hidden ? ['hidden'] : []);

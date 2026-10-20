@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const elements = new Map();
 function element() {
-  return { textContent: '', innerHTML: '', style: {}, children: [],
+  return { textContent: '', innerHTML: '', style: {}, children: [], setAttribute() {},
     classList: { add() {}, remove() {}, toggle() {}, contains() { return true; } },
     querySelector() { return element(); } };
 }
