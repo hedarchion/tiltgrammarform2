@@ -8,9 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261020-classmemory">
+  <link rel="stylesheet" href="styles.css?v=20261020-palms">
   <link rel="stylesheet" href="glass.css">
   <script src="vendor/face-api.min.js"></script>
+  <script defer src="vendor/hands/hands.js"></script>
 </head>
 <body>
   <div class="app" id="app">
@@ -65,7 +66,7 @@
         <div class="logo-wrap">
           <div class="logo-kicker">CLASSROOM ARCADE · GRAMMAR EDITION</div>
           <h1 class="logo">GRAMMAR<span>TILT</span></h1>
-          <p class="tagline">Fix the underlined error. Tilt left or right. Keep the streak alive.</p>
+          <p class="tagline">Fix the underlined error. Show a palm or tap an answer. Keep the streak alive.</p>
         </div>
 
         <div class="lobby-grid">
@@ -84,6 +85,12 @@
               <option value="2" selected>Form 2 · Original questions</option>
             </select>
             <div class="small-note">Choose a form before starting. Each class remembers its choice.</div>
+            <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
+            <select class="select" id="controlModeSelect">
+              <option value="palms">Open palm · visible hand tracking</option>
+              <option value="buttons">Big buttons / arrow keys</option>
+              <option value="tilt">Head tilt · optional</option>
+            </select>
             <div class="lobby-roster" id="lobbyRoster"></div>
 
             <div class="lobby-actions">
@@ -98,7 +105,7 @@
             <ul class="rules-list">
               <li><span>8</span> questions per player</li>
               <li><span>1</span> redemption shot if exactly 1 error</li>
-              <li><span>◀ ▶</span> tilt left or right to answer</li>
+              <li><span>◀ ▶</span> show a palm or tap to answer</li>
               <li><span>★</span> streaks, points &amp; live ranks</li>
             </ul>
             <button class="btn camera" id="cameraBtn" type="button">ENABLE CAMERA</button>
@@ -116,7 +123,8 @@
         <div class="turn-entry face-entry">
           <div class="portrait-preview"><canvas id="playerPreview" width="160" height="160" aria-label="Live player portrait preview"></canvas><span>◎</span></div>
           <div class="face-entry-actions">
-            <button class="btn primary" id="startTurnBtn" type="button">CAPTURE &amp; PLAY</button>
+            <button class="btn primary" id="numberedPlayerBtn" type="button">NEW NUMBERED PLAYER</button>
+            <button class="btn ghost" id="startTurnBtn" type="button">CAPTURE &amp; PLAY</button>
             <button class="btn ghost mini" id="idleCameraBtn" type="button">ENABLE CAMERA</button>
             <p class="small-note">Your photo becomes your score card.<br>Photos, face memory and scores stay on this device.</p>
           </div>
@@ -128,7 +136,7 @@
         <div class="small-note" id="questionRemaining"></div>
 
         <div class="manual-picker" id="manualPicker">
-          <div class="manual-label">PLAYED BEFORE? TAP YOUR FACE</div>
+          <div class="manual-label">PLAYED BEFORE? TAP YOUR PLAYER CARD</div>
           <div class="manual-chips" id="manualChips"></div>
         </div>
       </section>
@@ -155,6 +163,12 @@
           </button>
 
           <div class="tilt-meter" id="tiltMeter">
+            <div class="palm-monitor">
+              <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored hand tracking preview with left and right guides"></canvas>
+              <div id="palmStatus" role="status">Enable camera · raise one open palm</div>
+              <small>Hold 0.8s · lower hand to reset</small>
+              <button class="btn camera" id="palmCameraBtn" type="button">ENABLE CAMERA</button>
+            </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
             <div class="tilt-ring">
               <div class="tilt-needle" id="tiltNeedle"></div>
@@ -171,6 +185,7 @@
         </div>
 
         <div class="play-footer">
+          <button class="btn mini" id="controlModeBtn" type="button">PALMS · CHANGE</button>
           <button class="btn mini" id="recenterBtn" type="button">SET CENTRE</button>
           <div class="tilt-gauge">
             <span class="gauge-side left">L</span>
@@ -354,7 +369,8 @@
 
   <script src="questions.js?v=20261020-classmemory"></script>
   <script src="questions-form1.js?v=20261020-forms"></script>
-  <script src="app.js?v=20261020-form-selector-fix"></script>
+  <script src="palm-control.js?v=20261020-palms"></script>
+  <script src="app.js?v=20261020-palms"></script>
   <script src="glass.js"></script>
 </body>
 </html>

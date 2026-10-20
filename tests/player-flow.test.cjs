@@ -136,6 +136,16 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('phase="idle"; stream={}; faceIdentity.ready=true;');
   await run('detectTick();');
   assert.equal(run('faceIdentity.ready'), false, 'multiple faces clear identity readiness');
+  run('stream=null; session={active:true,rounds:0}; enterIdle();');
+  const beforeNumbered=run('currentStudents().length');
+  run('startNumberedPlayer();');
+  assert.equal(run('currentStudents().length'),beforeNumbered+1,'numbered player starts without camera');
+  assert.equal(run('phase'),'countdown');
+  assert.equal(run('currentStudents().at(-1).numbered'),true);
+  run('DB=loadDB(); enterIdle();');
+  await run('startTurn(currentStudents().at(-1));');
+  assert.equal(run('phase'),'countdown','saved numbered player returns without face detection');
+  assert.equal(run('currentStudents().length'),beforeNumbered+1,'reuses numbered score record');
   await Promise.resolve();
   assert.deepEqual(modelLoads, ['detector', 'landmarks', 'recognition']);
   console.log('Passed: local face recognition, stable multi-frame identity, ambiguity rejection, profile persistence/learning, existing-photo indexing, multiple-face rejection, scores and class isolation.');

@@ -17,6 +17,27 @@ function changeForm(value) {
   if (!saveDB()) target[key] = previous;
   refreshAll();
 }
+function controlMode() { return DB.settings.controlMode || "palms"; }
+function setControlMode(value) {
+  const mode = ["palms", "buttons", "tilt"].includes(value) ? value : "palms";
+  DB.settings.controlMode = mode;
+  resetTilt();
+  if (typeof stopPalmLoop === "function") stopPalmLoop();
+  hideLost();
+  if (mode !== "tilt") clearFaceCanvas();
+  saveDB();
+  renderControlMode();
+  if (mode === "palms" && stream) ensurePalmLoop();
+}
+function renderControlMode() {
+  const mode = controlMode();
+  document.body.classList.toggle("control-palms", mode === "palms");
+  document.body.classList.toggle("control-buttons", mode === "buttons");
+  $("controlModeSelect").value = mode;
+  $("controlModeBtn").textContent = mode === "palms" ? "PALMS · CHANGE" : mode === "tilt" ? "HEAD TILT · CHANGE" : "BUTTONS · CHANGE";
+  $("recenterBtn").classList.toggle("hidden", mode !== "tilt");
+  setCameraUI();
+}
 const TRACKING_FRESH_MS = 450;
 const NEUTRAL_HOLD_MS = 180;
 const FACE_LOST_MS = 5000;
@@ -88,6 +109,7 @@ function compareStudents(a, b) {
 }
 
 const defaultSettings = {
+  controlMode: "palms",
   sfx: true,
   music: true,
   lbEvery: 3,
@@ -106,6 +128,7 @@ function normalizeFaceDescriptor(value) {
 function normalizeStudent(raw) {
   return {
     id: raw?.id || makeId("student"),
+    numbered: raw?.numbered === true,
     photo: typeof raw?.photo === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(raw.photo)
       && raw.photo.length < 120000 ? raw.photo : "",
     faceSamples: Array.isArray(raw?.faceSamples)
@@ -133,6 +156,7 @@ function normalizeDB(raw) {
   };
   if (!raw || typeof raw !== "object") return db;
   if (raw.settings && typeof raw.settings === "object") {
+    db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
     db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
     db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
     db.settings.invertTilt = raw.settings.invertTilt === true;
@@ -533,14 +557,15 @@ function setCameraUI() {
   $("cameraToggleBtn").textContent = live ? "STOP CAMERA" : "ENABLE CAMERA";
   $("idleCameraBtn").textContent = live ? "CAMERA READY" : "ENABLE CAMERA";
   $("idleCameraBtn").disabled = live;
+  $("palmCameraBtn").classList.toggle("hidden", live);
   $("recenterBtn").disabled = !live;
   $("calibrateBtn").disabled = !live;
-  $("optionLeft").querySelector(".option-tag").textContent = live ? "◀ TILT LEFT" : "◀ CLICK OR PRESS ←";
-  $("optionRight").querySelector(".option-tag").textContent = live ? "TILT RIGHT ▶" : "CLICK OR PRESS → ▶";
+  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
+  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";
   $("camDot").title = live ? "Camera live" : "Camera off";
   $("cameraNote").textContent = live
-    ? "Camera ready. Capture a player photo to start; it stays on this device."
-    : "Capture each player’s face when they step up. No names needed.";
+    ? "Camera ready for palm control. Photo cards are optional and stay on this device."
+    : "Camera is optional for buttons. Enable it for palm control or photo cards.";
   setModelStatus();
 }
 
@@ -610,6 +635,7 @@ async function startCamera() {
     resetTilt();
     setCameraUI();
     ensureDetectionLoop();
+    if (controlMode() === "palms") ensurePalmLoop();
     return true;
   } catch (error) {
     console.warn("Camera start failed", error);
@@ -621,6 +647,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  stopPalmLoop();
   resetFaceIdentity();
   cameraGeneration += 1;
   resetTilt();
@@ -668,6 +695,7 @@ async function detectTick() {
       handleNoFace();
     } else {
       let result;
+      if (phase !== "idle" && controlMode() !== "tilt") return;
       if (phase === "idle") {
         const faces = await faceapi
           .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
@@ -748,7 +776,7 @@ function handleNoFace() {
   $("playerPreview").getContext("2d").clearRect(0, 0, 160, 160);
   if (!wasFace) return;
   if (phase === "idle") {
-    setIdleStatus(stream ? "Look at the camera, then capture your photo" : "Enable the camera for a new photo · returning players can tap their face");
+    setIdleStatus(stream ? "Look at the camera, then capture your photo" : "New numbered players need no face detection · returning players can tap their card");
   } else if (phase === "lobby") {
     setHudStudent(null, "Waiting for player");
   }
@@ -797,7 +825,7 @@ function maybeShowLost() {
     hideLost();
     return;
   }
-  if (!stream || Date.now() < lostContinueUntil) return;
+  if (controlMode() !== "tilt" || !stream || Date.now() < lostContinueUntil) return;
   const lastSeen = detection.face ? Date.now() : round.lastSeen || 0;
   if (!detection.face && Date.now() - lastSeen > FACE_LOST_MS && !lostShown) {
     lostShown = true;
@@ -1006,7 +1034,7 @@ function renderIdleRanks() {
     ? top.map((student) => `<div class="idle-rank-card">${avatarHTML(student)}<span class="pts">${student.totalScore || 0}</span></div>`).join("")
     : '<div class="idle-rank-card"><span class="name">No marks yet</span></div>';
   $("manualChips").innerHTML = currentStudents().map((student) => (
-    `<button class="chip-player" type="button" data-student-id="${student.id}" aria-label="Play again as player ${currentStudents().indexOf(student) + 1}">${avatarHTML(student)}<b>${student.photo ? `${student.totalScore || 0} PTS` : "ADD PHOTO"}</b></button>`
+    `<button class="chip-player" type="button" data-student-id="${student.id}" aria-label="Play again as player ${currentStudents().indexOf(student) + 1}">${avatarHTML(student)}<b>${student.photo ? `${student.totalScore || 0} PTS` : `PLAYER ${currentStudents().indexOf(student) + 1} · ${student.totalScore || 0} PTS`}</b></button>`
   )).join("");
   $("manualPicker").classList.toggle("hidden", !currentStudents().length);
 }
@@ -1024,7 +1052,7 @@ function renderTeacherRoster() {
     row.className = "teacher-row";
     row.innerHTML = `${avatarHTML(student)}
       <div class="teacher-row-main">
-        <div class="teacher-row-name">${student.photo ? "" : "Photo needed · "}${student.games || 0} rounds played</div>
+        <div class="teacher-row-name">${student.photo ? "" : student.numbered ? "Numbered player · " : "Photo needed · "}${student.games || 0} rounds played</div>
         <div class="teacher-row-stats">${student.totalScore || 0} PTS · AVG ${accuracyLabel(student)}</div>
       </div>
       <div class="teacher-row-actions">
@@ -1207,7 +1235,7 @@ function startSession() {
   enterIdle();
   sfx.start();
   startSessionClock();
-  toast("Class ready. Capture a face photo or pick a returning player.", "good", 3200);
+  toast("Class ready. Start a numbered player, capture a photo, or pick a saved card.", "good", 3200);
 }
 
 function startSessionClock() {
@@ -1259,8 +1287,8 @@ function enterIdle() {
   const summary = lastSummary;
   $("idleSub").textContent = summary
     ? `Last player scored ${summary.gained}/${QUESTIONS_PER_ROUND}. Next player, step up!`
-    : "Your face is your player card. Look at the camera, then capture and play.";
-  setIdleStatus(stream ? "Look at the camera, then capture your photo" : "Enable the camera for a new photo · returning players can tap their face");
+    : "Tap NEW NUMBERED PLAYER to play straight away, or choose a saved player.";
+  setIdleStatus(stream ? "Look at the camera, then capture your photo" : "New numbered players need no face detection · returning players can tap their card");
   renderIdleRanks();
   $("questionRemaining").textContent = `${unusedQuestionCount()} fresh questions remain for this class · saved across days`;
   startMusic();
@@ -1293,7 +1321,7 @@ async function startTurn(existingStudent = null) {
     return;
   }
   // Explicitly choosing a photo always remains available as a fallback.
-  if (existingStudent?.photo) {
+  if (existingStudent && (existingStudent.photo || existingStudent.numbered)) {
     if (faceIdentity.ready && performance.now() - faceIdentity.at <= TRACKING_FRESH_MS) {
       faceIdentity.samples.slice(-3).forEach(sample => learnFaceSample(existingStudent, sample.descriptor));
       if (!saveDB()) return;
@@ -1329,8 +1357,19 @@ async function startTurn(existingStudent = null) {
   }
 }
 
+function startNumberedPlayer() {
+  if (!session?.active || phase !== "idle" || isUiBlocking()) return;
+  if (unusedQuestionCount() < QUESTIONS_PER_ROUND) { toast("Not enough unused questions for a full round.", "warn"); return; }
+  const cls = getCurrentClass();
+  const student = normalizeStudent({numbered:true});
+  cls.students.push(student);
+  if (!saveDB()) { cls.students.pop(); return; }
+  refreshAll();
+  beginPlayer(student);
+}
 function beginPlayer(student) {
   if (!session?.active || phase !== "idle" || !student) return;
+  if (controlMode() !== "tilt") clearFaceCanvas();
   resetFaceIdentity();
   activeStudentId = student.id;
   phase = "countdown";
@@ -1346,7 +1385,9 @@ function beginPlayer(student) {
   smoothRoll = null;
   lastTrackingAt = 0;
   resetTilt();
-  $("countdownHint").textContent = stream
+  $("countdownHint").textContent = controlMode() === "palms"
+    ? "Lower your hands. Then hold one open palm in a left or right guide."
+    : controlMode() === "tilt" && stream
     ? "Look straight ahead and hold still to set your centre."
     : "Click an answer or use the left and right arrow keys.";
   setHudStudent(student);
@@ -1500,7 +1541,7 @@ function renderQuestion() {
   $("feedbackLine").className = "feedback-line";
   $("feedbackLine").textContent = redemption
     ? "One error this round. Make this shot count."
-    : stream ? "Tilt left or right and hold." : "Click an answer or use the left and right arrow keys.";
+    : controlMode() === "palms" ? "Hold one open palm in a guide, or tap an answer." : controlMode() === "tilt" && stream ? "Tilt left or right and hold." : "Click an answer or use the left and right arrow keys.";
   $("tiltCaption").textContent = "CENTRE YOUR HEAD";
   $("play").classList.remove("tilting-left", "tilting-right");
   ["optionLeft", "optionRight"].forEach((id) => {
@@ -1590,6 +1631,10 @@ function recalibrateTilt() {
 }
 
 function updateTilt(now) {
+  if (controlMode() !== "tilt") {
+    if (controlMode() === "buttons") $("tiltCaption").textContent = "TAP OR USE ← →";
+    return;
+  }
   if (phase !== "play" || !round || round.answered || isPlayBlocked() || document.hidden) {
     resetTilt();
     return;
@@ -1951,6 +1996,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   if (phase === "play") {
     updateTilt(now);
+    updatePalmFeedback(now);
     maybeShowLost();
   }
 }
@@ -1985,6 +2031,12 @@ function bindEvents() {
   });
 
   $("startBtn").addEventListener("click", startSession);
+  $("numberedPlayerBtn").addEventListener("click", startNumberedPlayer);
+  $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
+  $("controlModeBtn").addEventListener("click", () => {
+    const modes = ["palms", "buttons", "tilt"];
+    setControlMode(modes[(modes.indexOf(controlMode()) + 1) % modes.length]);
+  });
   $("startSessionBtn").addEventListener("click", startSession);
   $("stopSessionBtn").addEventListener("click", stopSession);
   $("hudStopBtn").addEventListener("click", stopSession);
@@ -2053,6 +2105,7 @@ function bindEvents() {
   });
   $("startTurnBtn").addEventListener("click", () => startTurn());
   $("idleCameraBtn").addEventListener("click", startCamera);
+  $("palmCameraBtn").addEventListener("click", startCamera);
   $("soundBtn").addEventListener("click", () => setSfx(!DB.settings.sfx));
   $("soundToggle").addEventListener("click", () => setSfx(!DB.settings.sfx));
   $("musicToggle").addEventListener("click", () => setMusic(!DB.settings.music));
@@ -2113,6 +2166,7 @@ function bindEvents() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       resetTilt();
+      if (typeof resetPalm === "function") resetPalm();
       stopMusic();
     }
     else if (session?.active) startMusic();
@@ -2125,6 +2179,7 @@ function init() {
   saveDB();
   bindEvents();
   refreshAll();
+  renderControlMode();
   showLobby();
   loadModels(false);
   requestAnimationFrame(frame);

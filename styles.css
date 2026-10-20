@@ -1015,3 +1015,34 @@ body.teacher-open #closeTeacher { display: block; }
 
 .face-match-preview { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--mint); font-weight: 900; font-size: 13px; }
 .face-match-preview .avatar { width: 58px; height: 58px; border-radius: 17px; }
+
+/* Classroom controls: large touch targets and visible hand tracking. */
+.options-row { grid-template-columns: minmax(0,1fr) clamp(180px,20vw,270px) minmax(0,1fr); }
+.option-card { min-height: clamp(190px,28vh,290px); padding: 28px 24px; touch-action: manipulation; }
+.option-text { font-size: clamp(38px,5.2vw,84px); overflow-wrap: anywhere; line-height: 1.08; }
+.option-tag { font-size: clamp(9px,.85vw,12px); line-height: 1.6; }
+.option-card:focus-visible { outline: 4px solid var(--mint); outline-offset: 5px; }
+.option-card:active { transform: translateY(1px) scale(.985); }
+#startBtn, #startTurnBtn, #numberedPlayerBtn { min-height: 58px; padding: 18px 24px; font-size: 12px; }
+.palm-monitor { display:none; width:100%; text-align:center; }
+#palmPreview { display:block; width:100%; aspect-ratio:16/9; background:#091326; border:2px solid rgba(124,255,203,.55); border-radius:12px; }
+#palmStatus { margin-top:10px; min-height:3em; font-size:16px; font-weight:900; line-height:1.4; color:var(--mint); }
+.palm-monitor small { font-size:12px; line-height:1.4; color:var(--muted); }
+.control-palms .palm-monitor { display:block; }
+.control-palms .tilt-meter > :not(.palm-monitor),
+.control-palms .tilt-gauge, .control-buttons .tilt-gauge { display:none; }
+.control-buttons .options-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.control-buttons .tilt-meter { display:none; }
+.play-footer { flex-wrap:wrap; }
+@media (max-height:760px) and (min-width:900px) {
+  .option-card { min-height:175px; padding:22px 18px; }
+}
+@media (max-width:760px) {
+  .options-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
+  .tilt-meter { grid-column:1/-1; grid-row:2; max-width:260px; justify-self:center; }
+  .option-card { min-height:165px; padding:20px 12px; }
+  .option-text { font-size:clamp(30px,8vw,52px); }
+  .option-tag { font-size:8px; }
+}
+
+#palmCameraBtn { min-height:44px; width:100%; margin-top:10px; font-size:9px; padding:10px 8px; }

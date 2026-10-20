@@ -50,8 +50,8 @@ on the HUD, countdown, results, player picker and leaderboard.
 
 Serve this folder as a static site. Keep `index.html`, `app.js`, `questions.js`,
 `styles.css`, `glass.css`, `glass.js`, `vendor/face-api.min.js` and all tiny detector,
-68-point landmark and recognition model files under `models/`. `vendor/hands/`
-is unused. Published camera access requires HTTPS; localhost supports development.
+68-point landmark and recognition model files under `models/`. Include
+`palm-control.js` and the complete `vendor/hands/` directory for palm controls. Published camera access requires HTTPS; localhost supports development.
 
 There is no backend or account. Class names, portraits, face descriptors, settings,
 scores and used-question IDs remain in browser localStorage. Only confirmed player
@@ -82,3 +82,21 @@ much/many and countable plurals. This is an easy practice subset of the
 (Pulse 2 Units 1–5, printed pages 50–55), rather than exhaustive syllabus coverage.
 Each topic has five constructions with twenty named contexts. Rebuild using
 `node scripts/build-form1.cjs`. Include `questions-form1.js` when hosting.
+
+## Classroom controls
+
+Open-palm control is the default; choose buttons/arrow keys or optional head tilt
+from **Answer controls** before starting, or **CHANGE** during a question. The
+mirrored preview draws hand landmarks and left/right guides. Lower your hand,
+then show one open hand inside a guide for 0.8 seconds. A progress bar confirms
+the hold; lower the hand again to reset. Small/outside hands are ignored, multiple
+hands inside the guide block selection, and stale or interrupted holds reset.
+This limits accidental input but cannot identify who owns a hand. Keep the active
+player near the camera, and use the large answer buttons whenever tracking struggles.
+
+**New numbered player** starts without a portrait or face recognition. Returning
+numbered players tap their numbered card to keep their score. Photo enrollment
+remains available. Face loss does not pause palm/button play. Hand inference runs
+locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
+(Apache 2.0); video is not uploaded. Camera permission is needed only for gestures
+or photo capture. `node tests/palm-control.test.cjs` checks input gating.

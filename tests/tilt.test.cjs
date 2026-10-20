@@ -14,6 +14,7 @@ const context = vm.createContext({
 });
 vm.runInContext(readFileSync('app.js', 'utf8').replace(/init\(\);\s*$/, ''), context);
 const run = code => vm.runInContext(code, context);
+run('DB.settings.controlMode="tilt";');
 for (const degrees of [-35, -12, -0.1, 0, 0.1, 12, 35]) {
   context.degrees = degrees;
   const angle = run(`rollFromLandmarks({
