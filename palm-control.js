@@ -58,7 +58,7 @@ function stopPalmLoop() {
   palmTimer=null;
   resetPalm();
   const canvas=$("palmPreview"); canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-  palmStatus('Camera off · buttons and arrow keys still work');
+  palmStatus('Camera off · enable in Teacher settings, or tap an answer');
 }
 async function ensurePalmLoop() {
   if(!stream || controlMode()!=='palms' || palmFailed) return;

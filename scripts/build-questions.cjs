@@ -24,7 +24,8 @@ function add(topic, pattern, forms, rows, tip) {
     if (seen.has(s)) throw new Error(`Duplicate sentence: ${s}`);
     seen.add(s);
     const answer = bank.length % 2;
-    bank.push({ id: `q_${createHash("sha256").update(`${topic}\0${s}`).digest("hex").slice(0, 16)}`, topic, s, w, c, f, tip,
+    const patternId = `f2p_${createHash("sha256").update(`${topic}\0${pattern}\0${forms}`).digest("hex").slice(0,12)}`;
+    bank.push({ patternId, id: `q_${createHash("sha256").update(`${topic}\0${s}`).digest("hex").slice(0, 16)}`, topic, s, w, c, f, tip,
       options: answer === 0 ? [c, f] : [f, c], answer });
   }
 }

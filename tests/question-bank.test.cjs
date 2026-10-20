@@ -43,6 +43,7 @@ for (const q of bank) {
   assert.ok(!/, (My|The|Our|His|Their)\b/.test(q.s), `${q.id} capitalisation after introductory phrase`);
 }
 assert.equal(topics.size, 20);
+assert.equal(new Set(bank.map(q => q.patternId)).size,100);
 for (const [topic, count] of topics) assert.equal(count, 50, topic);
 assert.equal(bank.filter(q => q.answer === 0).length, 500, 'answer positions balanced');
 const honest = bank.filter(q => q.s.includes('honest person'));
@@ -52,6 +53,8 @@ honest.forEach(q => assert.equal(q.c, 'an', 'honest has a silent h'));
 // Exercise the real round and redemption selectors for 30 players x 3 turns.
 run('DB.classes.test={id:"test",name:"Test class",students:[],usedQuestionIds:[]}; DB.activeClass="test"; DB.settings.music = false; DB.settings.sfx = false; session = {active:true, rounds:0, questionDeck:shuffledQuestions(), questionCycles:0};');
 const seen = new Set();
+const form2Patterns = [];
+const form2TopicSequence = [];
 const offeredTopics = new Map();
 for (let pass = 0; pass < 3; pass++) {
   for (let player = 0; player < 30; player++) {
@@ -64,6 +67,9 @@ for (let pass = 0; pass < 3; pass++) {
     for (const q of [...questions, redemption]) {
       assert.ok(!seen.has(q.id), `Repeated question ${q.id}`);
       seen.add(q.id);
+      assert.ok(!form2Patterns.slice(-24).includes(q.patternId), 'Form 2 construction not repeated within 24 questions');
+      form2Patterns.push(q.patternId);
+      form2TopicSequence.push(q.topic);
       offeredTopics.set(q.topic, (offeredTopics.get(q.topic) || 0) + 1);
     }
   }
@@ -72,6 +78,7 @@ for (let pass = 0; pass < 3; pass++) {
   }
 }
 assert.equal(seen.size, 810);
+assert.ok(form2TopicSequence.slice(20,100).some((topic,i)=>topic!==form2TopicSequence[i]),'topic order does not repeat a fixed 20-question cycle');
 assert.equal(run('session.questionDeck.length'), 190);
 assert.equal(run('getCurrentClass().usedQuestionIds.length'), 810);
 assert.ok(Math.max(...offeredTopics.values()) - Math.min(...offeredTopics.values()) <= 3, 'class-wide coverage stays balanced');
@@ -110,6 +117,7 @@ assert.equal(f1.length, 1000);
 assert.equal(new Set(f1.map(q => q.id)).size, 1000);
 assert.equal(new Set(f1.map(q => q.s)).size, 1000);
 assert.equal(new Set(f1.map(q => q.topic)).size, 10);
+assert.equal(new Set(f1.map(q => q.patternId)).size, 50);
 for (const q of f1) {
   assert.equal(q.s.match(/\{x\}/g)?.length, 1);
   assert.equal(q.options[q.answer], q.c);
@@ -121,12 +129,16 @@ for (const q of f1) {
 }
 run('DB.settings.music=false; DB.settings.sfx=false; session={active:true,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
 const f1Seen = new Set();
+const f1Patterns = [];
 for (let turn=0; turn<90; turn++) {
+  if (turn===45) run('session=null; round=null; DB=loadDB(); session={active:true,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
   run('startRound({id:"test-player"}); startRedemption();');
   for (const q of run('[...round.qs, round.redemption.q]')) {
     assert.ok(q.id.startsWith('f1_'));
     assert.ok(!f1Seen.has(q.id));
     f1Seen.add(q.id);
+    assert.ok(!f1Patterns.slice(-24).includes(q.patternId), 'Form 1 construction not repeated within 24 questions');
+    f1Patterns.push(q.patternId);
   }
 }
 assert.equal(f1Seen.size,810);
@@ -152,7 +164,6 @@ console.log('Passed: choosing a form before class creation and inheriting the se
 assert.equal(run('normalizeDB({settings:{}}).settings.palmHoldMs'),800,'old settings retain standard hold');
 run('setPalmHoldMs(1500); DB=loadDB();');
 assert.equal(run('DB.settings.palmHoldMs'),1500,'palm timing survives reload');
-assert.equal(elements.get('palmHoldQuick').value,'1500');
 assert.equal(elements.get('palmHold').value,'1500');
 assert.equal(elements.get('palmHoldHint').textContent,'Hold 1.5s · lower hand to reset');
 run('setPalmHoldMs(12);');
@@ -162,3 +173,5 @@ run('setPalmHoldMs(2000);');
 assert.equal(run('DB.settings.palmHoldMs'),1500,'failed save restores prior hold duration');
 storageFails=false;
 console.log('Passed: palm duration persistence, controls, instructions and failed-save rollback.');
+
+console.log('Passed: balanced topics, changing topic order and 24-question construction spacing for both forms, including saved history and redemption.');

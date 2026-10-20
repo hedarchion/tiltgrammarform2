@@ -48,8 +48,6 @@ function renderControlMode() {
   document.body.classList.toggle("control-palms", mode === "palms");
   document.body.classList.toggle("control-buttons", mode === "buttons");
   $("controlModeSelect").value = mode;
-  $("controlModeBtn").textContent = mode === "palms" ? "PALMS · CHANGE" : mode === "tilt" ? "HEAD TILT · CHANGE" : "BUTTONS · CHANGE";
-  $("recenterBtn").classList.toggle("hidden", mode !== "tilt");
   setCameraUI();
 }
 const TRACKING_FRESH_MS = 450;
@@ -421,8 +419,6 @@ function stopMusic() {
 }
 
 function updateSoundUI() {
-  $("soundBtn").textContent = DB.settings.sfx ? "SOUND" : "MUTED";
-  $("soundBtn").classList.toggle("muted", !DB.settings.sfx);
   $("soundToggle").classList.toggle("on", DB.settings.sfx);
   $("musicToggle").classList.toggle("on", DB.settings.music);
 }
@@ -521,7 +517,6 @@ function updateSessionHud() {
   const active = Boolean(session?.active);
   document.body.classList.toggle("in-session", active);
   $("hudRound").classList.toggle("hidden", !active);
-  $("hudStopBtn").classList.toggle("hidden", !active);
   if (active) {
     const showingRound = phase === "play" || phase === "countdown";
     $("hudRound").textContent = showingRound
@@ -572,12 +567,7 @@ function setCameraUI() {
   const live = Boolean(stream);
   document.body.classList.toggle("camera-on", live);
   document.body.classList.toggle("camera-off", !live);
-  $("cameraBtn").textContent = live ? "CAMERA LIVE" : "ENABLE CAMERA";
   $("cameraToggleBtn").textContent = live ? "STOP CAMERA" : "ENABLE CAMERA";
-  $("idleCameraBtn").textContent = live ? "CAMERA READY" : "ENABLE CAMERA";
-  $("idleCameraBtn").disabled = live;
-  $("palmCameraBtn").classList.toggle("hidden", live);
-  $("recenterBtn").disabled = !live;
   $("calibrateBtn").disabled = !live;
   $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
   $("optionRight").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";
@@ -1103,7 +1093,6 @@ function renderTeacherMeta() {
 
 function renderSettings() {
   $("palmHold").value = String(DB.settings.palmHoldMs);
-  $("palmHoldQuick").value = String(DB.settings.palmHoldMs);
   $("palmHoldHint").textContent = `Hold ${DB.settings.palmHoldMs / 1000}s · lower hand to reset`;
   $("tiltSensitivity").value = String(DB.settings.tiltThreshold);
   $("tiltHold").value = String(DB.settings.tiltHoldMs);
@@ -1416,35 +1405,16 @@ function countdownPause() {
   $("countdownNumber").textContent = "3";
 }
 
+function questionPattern(question) {
+  return question.patternId || `${question.topic}:${question.s}`;
+}
+
 function shuffledQuestions() {
-  const shuffle = (items) => {
-    for (let index = items.length - 1; index > 0; index -= 1) {
-      const other = Math.floor(Math.random() * (index + 1));
-      [items[index], items[other]] = [items[other], items[index]];
-    }
-    return items;
-  };
-  const byTopic = new Map();
   const used = new Set(getCurrentClass()?.usedQuestionIds || []);
-  const priorCounts = new Map();
-  selectedBank().forEach(question => {
-    if (used.has(question.id)) {
-      priorCounts.set(question.topic, (priorCounts.get(question.topic) || 0) + 1);
-      return;
-    }
-    if (!byTopic.has(question.topic)) byTopic.set(question.topic, []);
-    byTopic.get(question.topic).push(question);
-  });
-  const topics = shuffle([...byTopic.keys()]).sort((a, b) => (priorCounts.get(a) || 0) - (priorCounts.get(b) || 0));
-  topics.forEach(topic => shuffle(byTopic.get(topic)));
-  const available = [...byTopic.values()].reduce((total, questions) => total + questions.length, 0);
-  const questions = [];
-  // Interleave shuffled topics so the whole class gets balanced coverage.
-  while (questions.length < available) {
-    topics.forEach(topic => {
-      const question = byTopic.get(topic).pop();
-      if (question) questions.push(question);
-    });
+  const questions = selectedBank().filter(question => !used.has(question.id));
+  for (let index = questions.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [questions[index], questions[other]] = [questions[other], questions[index]];
   }
   return questions;
 }
@@ -1463,9 +1433,32 @@ function pickQuestion(excluded, excludedTopics) {
   session.questionDeck = session.questionDeck.filter(question => !used.has(question.id));
   const questions = new Set(excluded || []);
   const topics = new Set(excludedTopics || []);
-  let index = session.questionDeck.findIndex(question => !questions.has(question) && !topics.has(question.topic));
-  if (index < 0) index = session.questionDeck.findIndex(question => !questions.has(question));
-  if (index < 0) return null;
+  let candidates = session.questionDeck.filter(question => !questions.has(question));
+  const outsideRound = candidates.filter(question => !topics.has(question.topic));
+  if (outsideRound.length) candidates = outsideRound;
+  const bankById = new Map(selectedBank().map(question => [question.id, question]));
+  const history = (cls.usedQuestionIds || []).map(id => bankById.get(id)).filter(Boolean);
+  const topicCounts = new Map(), patternCounts = new Map(), lastPattern = new Map();
+  history.forEach((question, index) => {
+    const pattern = questionPattern(question);
+    topicCounts.set(question.topic, (topicCounts.get(question.topic) || 0) + 1);
+    patternCounts.set(pattern, (patternCounts.get(pattern) || 0) + 1);
+    lastPattern.set(pattern, index);
+  });
+  // A name change is still the same construction: keep it out of the next 24 slots.
+  const recentPatterns = new Set(history.slice(-24).map(questionPattern));
+  const freshPatterns = candidates.filter(question => !recentPatterns.has(questionPattern(question)));
+  if (freshPatterns.length) candidates = freshPatterns;
+  const recentTopics = new Set(history.slice(-2).map(question => question.topic));
+  const freshTopics = candidates.filter(question => !recentTopics.has(question.topic));
+  if (freshTopics.length) candidates = freshTopics;
+  // Least-used topics first; then rotate through constructions within each topic.
+  // Deck order breaks ties randomly, so classes do not repeat a fixed topic cycle.
+  candidates.sort((a, b) => (topicCounts.get(a.topic) || 0) - (topicCounts.get(b.topic) || 0)
+    || (patternCounts.get(questionPattern(a)) || 0) - (patternCounts.get(questionPattern(b)) || 0)
+    || (lastPattern.get(questionPattern(a)) ?? -1) - (lastPattern.get(questionPattern(b)) ?? -1));
+  if (!candidates.length) return null;
+  const index = session.questionDeck.indexOf(candidates[0]);
   const question = session.questionDeck.splice(index, 1)[0];
   if (!Array.isArray(cls.usedQuestionIds)) cls.usedQuestionIds = [];
   cls.usedQuestionIds.push(question.id);
@@ -1792,7 +1785,7 @@ function advanceRound() {
 
 function startRedemption() {
   if (!round) return;
-  const question = pickQuestion(round.qs);
+  const question = pickQuestion(round.qs, new Set(round.qs.map(question => question.topic)));
   if (!question) { toast("No unused redemption question remains for this class.", "warn"); finishRound(); return; }
   round.redemption = { active: true, q: question, won: false };
   round.answered = false;
@@ -2093,17 +2086,10 @@ function bindEvents() {
 
   $("startBtn").addEventListener("click", startSession);
   $("numberedPlayerBtn").addEventListener("click", startNumberedPlayer);
-  ["palmHold", "palmHoldQuick"].forEach(id => {
-    $(id).addEventListener("change", () => setPalmHoldMs($(id).value));
-  });
+  $("palmHold").addEventListener("change", () => setPalmHoldMs($("palmHold").value));
   $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
-  $("controlModeBtn").addEventListener("click", () => {
-    const modes = ["palms", "buttons", "tilt"];
-    setControlMode(modes[(modes.indexOf(controlMode()) + 1) % modes.length]);
-  });
   $("startSessionBtn").addEventListener("click", startSession);
   $("stopSessionBtn").addEventListener("click", stopSession);
-  $("hudStopBtn").addEventListener("click", stopSession);
   $("nextPlayerBtn").addEventListener("click", nextPlayer);
   $("roundLeaderboardBtn").addEventListener("click", closeRoundToLeaderboard);
   $("closeLeaderboardBtn").addEventListener("click", closeLeaderboard);
@@ -2167,19 +2153,14 @@ function bindEvents() {
     if (button) confirmFacePlayer(button.dataset.faceChoice);
   });
   $("startTurnBtn").addEventListener("click", () => startTurn());
-  $("idleCameraBtn").addEventListener("click", startCamera);
-  $("palmCameraBtn").addEventListener("click", startCamera);
-  $("soundBtn").addEventListener("click", () => setSfx(!DB.settings.sfx));
   $("soundToggle").addEventListener("click", () => setSfx(!DB.settings.sfx));
   $("musicToggle").addEventListener("click", () => setMusic(!DB.settings.music));
-  $("cameraBtn").addEventListener("click", startCamera);
   $("cameraToggleBtn").addEventListener("click", () => {
     if (stream) stopCamera();
     else startCamera();
   });
   $("reloadModelsBtn").addEventListener("click", () => loadModels(true));
   $("calibrateBtn").addEventListener("click", recalibrateTilt);
-  $("recenterBtn").addEventListener("click", recalibrateTilt);
   $("invertTiltToggle").addEventListener("click", () => {
     DB.settings.invertTilt = !DB.settings.invertTilt;
     resetTilt();

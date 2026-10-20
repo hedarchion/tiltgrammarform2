@@ -2,6 +2,12 @@ const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = readFileSync('index.html', 'utf8');
+const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
+for (const id of ['formSelect','controlModeSelect','palmHold','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','cameraToggleBtn','soundToggle','musicToggle','lbEvery']) {
+  assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
+  assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
+}
+for (const id of ['palmHoldQuick','controlModeBtn','recenterBtn','palmCameraBtn']) assert.ok(!html.includes(`id="${id}"`));
 function element(hidden = false) {
   const classes = new Set(hidden ? ['hidden'] : []);
   return {

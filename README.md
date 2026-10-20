@@ -71,7 +71,7 @@ Checks:
 
 ## Form 1 grammar
 
-Choose **Grammar level** in the lobby before starting. Existing classes default to
+Choose **Settings → Game settings → Grammar level** before starting. Existing classes default to
 Form 2. The choice is saved per class and locked during a session. Both forms keep
 their own question history through distinct IDs; switching preserves used questions.
 
@@ -86,10 +86,9 @@ Each topic has five constructions with twenty named contexts. Rebuild using
 ## Classroom controls
 
 Open-palm control is the default; choose buttons/arrow keys or optional head tilt
-from **Answer controls** before starting, or **CHANGE** during a question. The
+under **Teacher → Game settings → Answer controls**. The
 mirrored preview draws hand landmarks and left/right guides. Lower your hand,
-then show one open hand inside a guide for the selected hold duration (0.8 seconds by default). Choose **Palm hold** in
-the preview or **Teacher → Palm controls** to set 0.4–3 seconds. The setting is
+then show one open hand inside a guide for the selected hold duration (0.8 seconds by default). Choose **Teacher → Palm controls** to set 0.4–3 seconds. The setting is
 saved on this device; changing it resets any partial hold. A progress bar confirms
 the hold; lower the hand again to reset. Small/outside hands are ignored, multiple
 hands inside the guide block selection, and stale or interrupted holds reset.
@@ -113,3 +112,17 @@ on second/first/third-place podium steps. When ranks change, characters move fro
 their previous positions, including down off the podium. Previous ranks are saved
 per class; numbered players use their number as the head. Reduced-motion settings
 show the final positions immediately. The full standings continue below the podium.
+
+## Question spacing and settings
+
+The selector balances topic use and rotates sentence constructions, with random
+tie-breaking instead of a fixed topic cycle. Questions with only a name changed
+share a construction ID. The same construction is kept out of the next 24 reserved
+questions whenever alternatives remain; the rule uses saved class history and also
+covers redemption questions. Topic coverage and exact-question non-repetition are
+preserved. Near exhaustion, the spacing rule relaxes rather than recycling content.
+Existing question IDs and used histories remain unchanged.
+
+Grammar level, answer mode, palm timing, camera, calibration, sound, leaderboard
+frequency and session controls live in the Teacher Console. The player screen
+keeps large answers, hand tracking feedback and the read-only hold instruction.

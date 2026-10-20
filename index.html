@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261020-podium">
+  <link rel="stylesheet" href="styles.css?v=20261020-variety-settings">
   <link rel="stylesheet" href="glass.css">
   <script src="vendor/face-api.min.js"></script>
   <script defer src="vendor/hands/hands.js"></script>
@@ -38,14 +38,12 @@
       <div class="hud-center">
         <span class="hud-chip" id="hudClass">NO CLASS</span>
         <span class="hud-chip session-chip hidden" id="hudRound">ROUND 0</span>
-        <button class="hud-chip danger hidden" id="hudStopBtn" type="button">STOP</button>
       </div>
 
       <div class="hud-right">
-        <button class="hud-btn" id="soundBtn" type="button" title="Toggle sound">SOUND</button>
         <button class="hud-btn" id="leaderboardBtn" type="button" title="Show leaderboard">RANKS</button>
         <button class="hud-btn" id="fullscreenBtn" type="button" title="Toggle fullscreen">FULL</button>
-        <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher console">TEACHER</button>
+        <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher settings">SETTINGS</button>
       </div>
     </header>
 
@@ -79,18 +77,6 @@
               <button class="btn primary compact" id="quickCreateBtn" type="button">CREATE CLASS</button>
             </div>
 
-            <label for="formSelect" class="panel-label">GRAMMAR LEVEL</label>
-            <select class="select" id="formSelect">
-              <option value="1">Form 1 · Easy KSSM grammar</option>
-              <option value="2" selected>Form 2 · Original questions</option>
-            </select>
-            <div class="small-note">Choose a form before starting. Each class remembers its choice.</div>
-            <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
-            <select class="select" id="controlModeSelect">
-              <option value="palms">Open palm · visible hand tracking</option>
-              <option value="buttons">Big buttons / arrow keys</option>
-              <option value="tilt">Head tilt · optional</option>
-            </select>
             <div class="lobby-roster" id="lobbyRoster"></div>
 
             <div class="lobby-actions">
@@ -108,8 +94,6 @@
               <li><span>◀ ▶</span> show a palm or tap to answer</li>
               <li><span>★</span> streaks, points &amp; live ranks</li>
             </ul>
-            <button class="btn camera" id="cameraBtn" type="button">ENABLE CAMERA</button>
-            <div class="small-note" id="cameraNote">Capture a player photo on this device. Live video is never saved.</div>
             <div class="small-note" id="questionBankInfo"></div>
             <div class="mini-rank" id="lobbyTop"></div>
           </div>
@@ -125,7 +109,6 @@
           <div class="face-entry-actions">
             <button class="btn primary" id="numberedPlayerBtn" type="button">NEW NUMBERED PLAYER</button>
             <button class="btn ghost" id="startTurnBtn" type="button">CAPTURE &amp; PLAY</button>
-            <button class="btn ghost mini" id="idleCameraBtn" type="button">ENABLE CAMERA</button>
             <p class="small-note">Your photo becomes your score card.<br>Photos, face memory and scores stay on this device.</p>
           </div>
         </div>
@@ -165,17 +148,8 @@
           <div class="tilt-meter" id="tiltMeter">
             <div class="palm-monitor">
               <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored hand tracking preview with left and right guides"></canvas>
-              <div id="palmStatus" role="status">Enable camera · raise one open palm</div>
+              <div id="palmStatus" role="status">Enable camera in Teacher settings</div>
               <small id="palmHoldHint">Hold 0.8s · lower hand to reset</small>
-              <label class="palm-hold-label" for="palmHoldQuick">PALM HOLD</label>
-              <select class="select" id="palmHoldQuick"><option value="400">0.4 seconds · Fast</option>
-                <option value="600">0.6 seconds</option>
-                <option value="800" selected>0.8 seconds · Standard</option>
-                <option value="1000">1 second</option>
-                <option value="1500">1.5 seconds</option>
-                <option value="2000">2 seconds</option>
-                <option value="3000">3 seconds · Deliberate</option></select>
-              <button class="btn camera" id="palmCameraBtn" type="button">ENABLE CAMERA</button>
             </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
             <div class="tilt-ring">
@@ -193,8 +167,6 @@
         </div>
 
         <div class="play-footer">
-          <button class="btn mini" id="controlModeBtn" type="button">PALMS · CHANGE</button>
-          <button class="btn mini" id="recenterBtn" type="button">SET CENTRE</button>
           <div class="tilt-gauge">
             <span class="gauge-side left">L</span>
             <div class="gauge-track"><div class="gauge-center"></div><div class="gauge-needle" id="gaugeNeedle"></div></div>
@@ -290,6 +262,22 @@
         </section>
 
         <section class="drawer-section">
+          <h3>GAME SETTINGS</h3>
+            <label for="formSelect" class="panel-label">GRAMMAR LEVEL</label>
+            <select class="select" id="formSelect">
+              <option value="1">Form 1 · Easy KSSM grammar</option>
+              <option value="2" selected>Form 2 · Original questions</option>
+            </select>
+            <div class="small-note">Choose a form before starting. Each class remembers its choice.</div>
+            <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
+            <select class="select" id="controlModeSelect">
+              <option value="palms">Open palm · visible hand tracking</option>
+              <option value="buttons">Big buttons / arrow keys</option>
+              <option value="tilt">Head tilt · optional</option>
+            </select>
+        </section>
+
+        <section class="drawer-section">
           <h3>SESSION</h3>
           <div class="row">
             <button class="btn mini primary" id="startSessionBtn" type="button">START</button>
@@ -348,7 +336,7 @@
           <div class="row">
             <button class="toggle" id="invertTiltToggle" type="button">NORMAL</button>
           </div>
-          <p class="drawer-hint">Start upright, tilt towards an answer, then return to centre before the next choice. Use SET CENTRE if your position changes. Swap directions if the controls feel mirrored.</p>
+          <p class="drawer-hint">Start upright, tilt towards an answer, then return to centre before the next choice. Use RECALIBRATE if your position changes. Swap directions if the controls feel mirrored.</p>
         </section>
 
         <section class="drawer-section">
@@ -357,6 +345,7 @@
             <button class="btn mini" id="cameraToggleBtn" type="button">ENABLE CAMERA</button>
             <button class="btn mini" id="reloadModelsBtn" type="button">RELOAD FACE ENGINE</button>
           </div>
+          <p class="drawer-hint" id="cameraNote">Enable the camera for palm controls or photo cards.</p>
           <div class="drawer-meta" id="modelStatus">Camera not started.</div>
         </section>
 
@@ -388,10 +377,10 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="questions.js?v=20261020-classmemory"></script>
-  <script src="questions-form1.js?v=20261020-forms"></script>
-  <script src="palm-control.js?v=20261020-podium"></script>
-  <script src="app.js?v=20261020-podium"></script>
+  <script src="questions.js?v=20261020-variety-settings"></script>
+  <script src="questions-form1.js?v=20261020-variety-settings"></script>
+  <script src="palm-control.js?v=20261020-variety-settings"></script>
+  <script src="app.js?v=20261020-variety-settings"></script>
   <script src="glass.js"></script>
 </body>
 </html>

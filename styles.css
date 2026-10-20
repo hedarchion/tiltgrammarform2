@@ -1045,10 +1045,7 @@ body.teacher-open .drawer { transform: none; }
   .option-tag { font-size:8px; }
 }
 
-#palmCameraBtn { min-height:44px; width:100%; margin-top:10px; font-size:9px; padding:10px 8px; }
 
-.palm-hold-label { display:block; margin-top:10px; font-size:10px; letter-spacing:.08em; font-weight:900; }
-#palmHoldQuick { width:100%; min-height:44px; margin-top:5px; padding:8px; font-size:13px; }
 
 /* Portrait heads stay attached to the same body while ranks change. */
 .lb-list { display:block; }
@@ -1094,3 +1091,6 @@ body.teacher-open .drawer { transform: none; }
 .leaderboard-card { display:flex; flex-direction:column; }
 .lb-kicker, .lb-title, .lb-actions { flex-shrink:0; }
 .lb-list { min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 4px 4px; }
+
+.drawer-section > .panel-label { display:block; margin:14px 0 8px; }
+.drawer-section > .select { display:block; width:100%; min-height:46px; }
