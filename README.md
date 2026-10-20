@@ -2,7 +2,8 @@
 
 Live app: https://hedarchion.github.io/tiltgrammarform2/
 
-A static classroom game with 1,000 questions across 20 grammar topics, eight
+A static classroom game with a Form 1/Form 2 selector: 1,000 easy Form 1 questions
+across 10 topics and the original 1,000 Form 2 questions across 20 topics. There are eight
 questions per turn and a redemption question after exactly one error. Thirty
 students can play three turns each: 720 main questions plus up to 90 redemptions.
 
@@ -67,3 +68,17 @@ Checks:
 - `node tests/tilt.test.cjs`
 - `node tests/player-flow.test.cjs`
 - `node tests/question-bank.test.cjs`
+
+## Form 1 grammar
+
+Choose **Grammar level** in the lobby before starting. Existing classes default to
+Form 2. The choice is saved per class and locked during a session. Both forms keep
+their own question history through distinct IDs; switching preserves used questions.
+
+Form 1 uses short sentences and familiar vocabulary for present simple, present
+continuous, past simple, past continuous, comparatives, superlatives, a/an, some/any,
+much/many and countable plurals. This is an easy practice subset of the
+[KSSM Form 1 DSKP textbook scope](https://anyflip.com/iowpp/goxm/basic/51-76)
+(Pulse 2 Units 1–5, printed pages 50–55), rather than exhaustive syllabus coverage.
+Each topic has five constructions with twenty named contexts. Rebuild using
+`node scripts/build-form1.cjs`. Include `questions-form1.js` when hosting.

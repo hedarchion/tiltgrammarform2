@@ -21,6 +21,7 @@ const context = vm.createContext({
 });
 const run = code => vm.runInContext(code, context);
 run(fs.readFileSync('questions.js', 'utf8'));
+run(fs.readFileSync('questions-form1.js', 'utf8'));
 run(fs.readFileSync('app.js', 'utf8').replace(/init\(\);\s*$/, ''));
 const bank = run('QUESTION_BANK');
 assert.equal(bank.length, 1000);
@@ -96,3 +97,44 @@ assert.equal(run('getCurrentClass().usedQuestionIds.length'), beforeFailure, 'fa
 storageFails = false;
 assert.ok(run('pickQuestion();'));
 console.log('Passed: 1,000 questions, 90 turns plus 90 redemptions without repeats, persistence across days, full-bank exhaustion without recycling and separate class histories.');
+
+// Form switching keeps legacy classes on Form 2 and retains both histories.
+run('session=null; DB=normalizeDB({activeClass:"forms",classes:{forms:{name:"Forms",students:[],usedQuestionIds:[QUESTION_BANK[0].id]}}});');
+assert.equal(run('selectedForm()'), 2);
+assert.equal(run('unusedQuestionCount()'), 999);
+run('getCurrentClass().form=1; saveDB(); DB=loadDB();');
+assert.equal(run('selectedForm()'), 1);
+assert.equal(run('unusedQuestionCount()'), 1000);
+const f1 = run('FORM1_BANK');
+assert.equal(f1.length, 1000);
+assert.equal(new Set(f1.map(q => q.id)).size, 1000);
+assert.equal(new Set(f1.map(q => q.s)).size, 1000);
+assert.equal(new Set(f1.map(q => q.topic)).size, 10);
+for (const q of f1) {
+  assert.equal(q.s.match(/\{x\}/g)?.length, 1);
+  assert.equal(q.options[q.answer], q.c);
+  assert.notEqual(q.w, q.c);
+  assert.notEqual(q.w, q.f);
+  assert.notEqual(q.c, q.f);
+  assert.ok(q.s.split(' ').length <= 15, 'short Form 1 sentences');
+  assert.ok(!bank.some(old => old.id === q.id));
+}
+run('DB.settings.music=false; DB.settings.sfx=false; session={active:true,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
+const f1Seen = new Set();
+for (let turn=0; turn<90; turn++) {
+  run('startRound({id:"test-player"}); startRedemption();');
+  for (const q of run('[...round.qs, round.redemption.q]')) {
+    assert.ok(q.id.startsWith('f1_'));
+    assert.ok(!f1Seen.has(q.id));
+    f1Seen.add(q.id);
+  }
+}
+assert.equal(f1Seen.size,810);
+assert.equal(run('unusedQuestionCount()'),190);
+run('changeForm(2);');
+assert.equal(run('selectedForm()'),1,'cannot switch during a session');
+run('session=null; getCurrentClass().form=2;');
+assert.equal(run('unusedQuestionCount()'),999,'Form 2 history remains intact');
+run('getCurrentClass().form=1; saveDB(); DB=loadDB();');
+assert.equal(run('unusedQuestionCount()'),190,'Form 1 history persists across reloads');
+console.log('Passed: Form 1 bank structure, 90 turns and redemptions, saved form choice, session lock and independent form histories.');

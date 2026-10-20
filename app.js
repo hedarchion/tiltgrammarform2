@@ -4,6 +4,17 @@ const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "grammartilt_v2";
 const MODEL_URL = "models";
 const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
+const FORM1_BANK = Array.isArray(window.BANK_FORM1) ? window.BANK_FORM1 : [];
+function selectedForm(cls = getCurrentClass()) { return cls?.form === 1 ? 1 : 2; }
+function selectedBank(cls = getCurrentClass()) { return selectedForm(cls) === 1 ? FORM1_BANK : QUESTION_BANK; }
+function changeForm(value) {
+  const cls = getCurrentClass();
+  if (!cls || session?.active) return;
+  const previous = cls.form;
+  cls.form = Number(value) === 1 ? 1 : 2;
+  if (!saveDB()) cls.form = previous;
+  refreshAll();
+}
 const TRACKING_FRESH_MS = 450;
 const NEUTRAL_HOLD_MS = 180;
 const FACE_LOST_MS = 5000;
@@ -134,6 +145,7 @@ function normalizeDB(raw) {
       db.classes[id] = {
         id,
         name: cleanName(value.name, 40) || "Class",
+        form: value.form === 1 ? 1 : 2,
         createdAt: Number(value.createdAt) || Date.now(),
         students,
         usedQuestionIds: Array.isArray(value.usedQuestionIds)
@@ -472,6 +484,7 @@ function updateSessionHud() {
       : `ROUNDS ${session.rounds}`;
   }
   $("classSelect").disabled = active;
+  $("formSelect").disabled = active || !getCurrentClass();
   $("newClassBtn").disabled = active;
   $("createClassBtn").disabled = active;
   $("startSessionBtn").disabled = active || !getCurrentClass();
@@ -955,6 +968,8 @@ function drawPlayerPreview() {
 
 function renderLobby() {
   const cls = getCurrentClass();
+  $("formSelect").value = String(selectedForm());
+  $("formSelect").disabled = Boolean(session?.active) || !cls;
   $("lobbyClassName").textContent = cls ? cls.name : "No class yet";
   $("quickCreate").classList.toggle("hidden", Boolean(cls));
   $("lobbyRoster").innerHTML = "";
@@ -976,10 +991,10 @@ function renderLobby() {
     : '<div class="drawer-meta">Marks will appear here after the first round.</div>';
   $("lobbyStatus").textContent = !cls
     ? "Create a class to begin."
-    : `${cls.students.length} saved players · ${unusedQuestionCount()} of ${QUESTION_BANK.length} questions unused · class progress saved`;
+    : `${cls.students.length} saved players · ${unusedQuestionCount()} of ${selectedBank().length} Form ${selectedForm()} questions unused · class progress saved`;
   $("startBtn").disabled = !cls;
   const classPasses = Math.floor(unusedQuestionCount() / (30 * (QUESTIONS_PER_ROUND + 1)));
-  $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused questions · ${new Set(QUESTION_BANK.map(q => q.topic)).size} topics · ${classPasses} full rounds for 30 players, including redemption`;
+  $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused questions · ${new Set(selectedBank().map(q => q.topic)).size} Form ${selectedForm()} topics · ${classPasses} full rounds for 30 players, including redemption`;
 }
 
 function renderIdleRanks() {
@@ -1162,7 +1177,7 @@ function startSession() {
     toast("Fewer than 8 unused questions remain for this class. Add new questions to continue without repeats.", "warn", 6000);
     return;
   }
-  if (!QUESTION_BANK.length) {
+  if (!selectedBank().length) {
     toast("The question bank did not load. Check questions.js.", "bad", 4200);
     return;
   }
@@ -1365,7 +1380,7 @@ function shuffledQuestions() {
   const byTopic = new Map();
   const used = new Set(getCurrentClass()?.usedQuestionIds || []);
   const priorCounts = new Map();
-  QUESTION_BANK.forEach(question => {
+  selectedBank().forEach(question => {
     if (used.has(question.id)) {
       priorCounts.set(question.topic, (priorCounts.get(question.topic) || 0) + 1);
       return;
@@ -1388,9 +1403,9 @@ function shuffledQuestions() {
 }
 
 function unusedQuestionCount(cls = getCurrentClass()) {
-  if (!cls) return QUESTION_BANK.length;
+  if (!cls) return selectedBank(cls).length;
   const used = new Set(cls.usedQuestionIds || []);
-  return QUESTION_BANK.filter(question => !used.has(question.id)).length;
+  return selectedBank(cls).filter(question => !used.has(question.id)).length;
 }
 
 function pickQuestion(excluded, excludedTopics) {
@@ -2007,6 +2022,7 @@ function bindEvents() {
   $("newClassName").addEventListener("keydown", (event) => {
     if (event.key === "Enter") $("createClassBtn").click();
   });
+  $("formSelect").addEventListener("change", () => changeForm($("formSelect").value));
   $("classSelect").addEventListener("change", () => {
     resetFaceIdentity();
     if (session?.active || !DB.classes[$("classSelect").value]) return;

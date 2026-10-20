@@ -78,6 +78,12 @@
               <button class="btn primary compact" id="quickCreateBtn" type="button">CREATE CLASS</button>
             </div>
 
+            <label for="formSelect" class="panel-label">GRAMMAR LEVEL</label>
+            <select class="select" id="formSelect">
+              <option value="1">Form 1 · Easy KSSM grammar</option>
+              <option value="2" selected>Form 2 · Original questions</option>
+            </select>
+            <div class="small-note">Choose a form before starting. Each class remembers its choice.</div>
             <div class="lobby-roster" id="lobbyRoster"></div>
 
             <div class="lobby-actions">
@@ -347,7 +353,8 @@
   </div>
 
   <script src="questions.js?v=20261020-classmemory"></script>
-  <script src="app.js?v=20261020-classmemory"></script>
+  <script src="questions-form1.js?v=20261020-forms"></script>
+  <script src="app.js?v=20261020-forms"></script>
   <script src="glass.js"></script>
 </body>
 </html>
