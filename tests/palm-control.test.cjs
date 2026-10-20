@@ -37,3 +37,15 @@ assert.ok(!tick([left],7100).answer);
 assert.equal(P.describe(hand(.3,true,.1)).eligible,false,'small background hands ignored');
 assert.equal(P.describe(hand(.98)).eligible,false,'hands outside guide ignored');
 console.log('Passed: palm position, open-hand gate, deliberate hold, release-to-rearm, side changes, stale frames, multiple hands and blocked play.');
+
+for (const holdMs of [400,600,800,1000,1500,2000,3000]) {
+  const custom=P.createState();
+  P.step(custom,[],0,true,holdMs); P.step(custom,[],350,true,holdMs);
+  for(let elapsed=0;elapsed<holdMs;elapsed+=100) {
+    const result=P.step(custom,[left],400+elapsed,true,holdMs);
+    assert.ok(!result.answer,`${holdMs}ms must not confirm early`);
+    assert.equal(result.ratio,elapsed/holdMs,'progress uses chosen duration');
+  }
+  assert.equal(P.step(custom,[left],400+holdMs,true,holdMs).answer,'left');
+}
+console.log('Passed: all seven palm hold durations and proportional progress.');

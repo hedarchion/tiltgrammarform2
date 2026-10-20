@@ -717,11 +717,12 @@ body.in-session .streak-rack { opacity: 1; transform: translateY(0); }
 body.teacher-open .drawer { transform: none; }
 .drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 22px 16px; border-bottom: 1px solid var(--line); }
 .drawer-title { font-size: 23px; font-weight: 900; margin-top: 4px; letter-spacing: -0.03em; }
-.drawer-close, .close-panel {
+.drawer-close {
   border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--muted);
-  width: 35px; height: 35px; border-radius: 10px; font-size: 24px; line-height: 1;
+  display: grid; place-items: center; flex: 0 0 44px; padding: 0;
+  width: 44px; height: 44px; border-radius: 12px; line-height: 1;
 }
-.drawer-close:hover, .close-panel:hover { color: var(--ink); border-color: var(--line-hot); }
+.drawer-close:hover { color: var(--ink); border-color: var(--line-hot); }
 .drawer-body { overflow: auto; padding: 6px 22px 28px; }
 .drawer-section { padding: 17px 0; border-bottom: 1px solid rgba(164, 187, 255, 0.12); }
 .drawer-section h3 { margin: 0 0 10px; font-family: var(--pixel); font-size: 8px; letter-spacing: 0.1em; color: var(--mint); font-weight: 400; }
@@ -747,8 +748,7 @@ body.teacher-open .drawer { transform: none; }
 .icon-mini.danger { color: #ffb1bc; border-color: rgba(255, 77, 103, 0.35); }
 .danger-zone h3 { color: var(--coral); }
 .roster-empty-row { color: var(--dim); font-size: 11.5px; font-weight: 800; padding: 8px 2px; }
-.close-panel { position: absolute; z-index: 62; top: 18px; right: 18px; display: none; }
-body.teacher-open #closeTeacher { display: block; }
+.drawer-close:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }
 
 /* ---------- Enrollment modal ---------- */
 .modal { z-index: 70; }
@@ -1046,3 +1046,6 @@ body.teacher-open #closeTeacher { display: block; }
 }
 
 #palmCameraBtn { min-height:44px; width:100%; margin-top:10px; font-size:9px; padding:10px 8px; }
+
+.palm-hold-label { display:block; margin-top:10px; font-size:10px; letter-spacing:.08em; font-weight:900; }
+#palmHoldQuick { width:100%; min-height:44px; margin-top:5px; padding:8px; font-size:13px; }

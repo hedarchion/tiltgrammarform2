@@ -17,6 +17,16 @@ function changeForm(value) {
   if (!saveDB()) target[key] = previous;
   refreshAll();
 }
+const PALM_HOLD_DURATIONS = [400, 600, 800, 1000, 1500, 2000, 3000];
+function setPalmHoldMs(value) {
+  const duration = Number(value);
+  if (!PALM_HOLD_DURATIONS.includes(duration)) return;
+  const previous = DB.settings.palmHoldMs;
+  DB.settings.palmHoldMs = duration;
+  if (!saveDB()) DB.settings.palmHoldMs = previous;
+  if (typeof resetPalm === "function") resetPalm();
+  renderSettings();
+}
 function controlMode() { return DB.settings.controlMode || "palms"; }
 function setControlMode(value) {
   const mode = ["palms", "buttons", "tilt"].includes(value) ? value : "palms";
@@ -114,6 +124,7 @@ function compareStudents(a, b) {
 
 const defaultSettings = {
   controlMode: "palms",
+  palmHoldMs: 800,
   sfx: true,
   music: true,
   lbEvery: 3,
@@ -160,6 +171,7 @@ function normalizeDB(raw) {
   };
   if (!raw || typeof raw !== "object") return db;
   if (raw.settings && typeof raw.settings === "object") {
+    db.settings.palmHoldMs = PALM_HOLD_DURATIONS.includes(Number(raw.settings.palmHoldMs)) ? Number(raw.settings.palmHoldMs) : 800;
     db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
     db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
     db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
@@ -1087,6 +1099,9 @@ function renderTeacherMeta() {
 }
 
 function renderSettings() {
+  $("palmHold").value = String(DB.settings.palmHoldMs);
+  $("palmHoldQuick").value = String(DB.settings.palmHoldMs);
+  $("palmHoldHint").textContent = `Hold ${DB.settings.palmHoldMs / 1000}s · lower hand to reset`;
   $("tiltSensitivity").value = String(DB.settings.tiltThreshold);
   $("tiltHold").value = String(DB.settings.tiltHoldMs);
   $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
@@ -1982,7 +1997,6 @@ function openTeacher() {
   document.body.classList.add("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "false");
   $("drawerScrim").classList.remove("hidden");
-  $("closeTeacher").classList.remove("hidden");
   renderTeacherRoster();
   renderTeacherMeta();
   renderSettings();
@@ -1993,7 +2007,6 @@ function closeTeacherPanel() {
   document.body.classList.remove("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "true");
   $("drawerScrim").classList.add("hidden");
-  $("closeTeacher").classList.add("hidden");
 }
 
 function frame(now) {
@@ -2036,6 +2049,9 @@ function bindEvents() {
 
   $("startBtn").addEventListener("click", startSession);
   $("numberedPlayerBtn").addEventListener("click", startNumberedPlayer);
+  ["palmHold", "palmHoldQuick"].forEach(id => {
+    $(id).addEventListener("change", () => setPalmHoldMs($(id).value));
+  });
   $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
   $("controlModeBtn").addEventListener("click", () => {
     const modes = ["palms", "buttons", "tilt"];
@@ -2061,7 +2077,6 @@ function bindEvents() {
   $("manageBtn").addEventListener("click", openTeacher);
   $("teacherBtn").addEventListener("click", openTeacher);
   $("drawerClose").addEventListener("click", closeTeacherPanel);
-  $("closeTeacher").addEventListener("click", closeTeacherPanel);
   $("drawerScrim").addEventListener("click", closeTeacherPanel);
   $("newClassBtn").addEventListener("click", () => $("classCreate").classList.toggle("hidden"));
   $("createClassBtn").addEventListener("click", () => {

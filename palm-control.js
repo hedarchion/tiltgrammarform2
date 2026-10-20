@@ -1,7 +1,7 @@
 "use strict";
 // MediaPipe Hands 0.4.1675469240; landmarks are mirrored to match the preview.
 const PalmInput = (() => {
-  const HOLD_MS = 800, RELEASE_MS = 350, MAX_GAP_MS = 600;
+  const RELEASE_MS = 350, MAX_GAP_MS = 600;
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   function describe(points) {
     if (points?.length !== 21 || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return null;
@@ -13,7 +13,8 @@ const PalmInput = (() => {
       side:x < .44 ? 'left' : x > .56 ? 'right' : null};
   }
   function createState() { return {side:null,since:null,lastAt:null,latched:true,releaseAt:null}; }
-  function step(state, hands, now, enabled) {
+  function step(state, hands, now, enabled, holdMs = 800) {
+    const duration = Number.isFinite(holdMs) ? Math.max(400, Math.min(3000, holdMs)) : 800;
     const active = hands.map(describe).filter(h => h?.eligible);
     if (!enabled || (state.lastAt !== null && now-state.lastAt > MAX_GAP_MS)) {
       state.side=null; state.since=null; state.releaseAt=null;
@@ -39,7 +40,7 @@ const PalmInput = (() => {
       return {status:!hand.open?'Hand detected · open your fingers':'Hand detected · move left or right',hand,ratio:0};
     }
     if (state.side!==hand.side || state.since===null) {state.side=hand.side;state.since=now;}
-    const ratio=Math.min(1,(now-state.since)/HOLD_MS);
+    const ratio=Math.min(1,(now-state.since)/duration);
     if (ratio>=1) {state.latched=true;state.side=null;state.since=null;}
     return {status:ratio>=1?'Answer selected · lower your hand':`Open palm · hold ${hand.side} ${Math.round(ratio*100)}%`,hand,ratio,answer:ratio>=1?hand.side:null};
   }
@@ -104,7 +105,7 @@ function updatePalmFeedback(now) {
 function handlePalmResults(results) {
   if(!stream || controlMode()!=='palms' || document.hidden || palmRequestGeneration!==palmGeneration) return;
   const hands=results.multiHandLandmarks||[];
-  const result=PalmInput.step(palmState,hands,performance.now(),phase==='play' && !!round && !round.answered && !isPlayBlocked());
+  const result=PalmInput.step(palmState,hands,performance.now(),phase==='play' && !!round && !round.answered && !isPlayBlocked(),DB.settings.palmHoldMs);
   const canvas=$("palmPreview"),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
   ctx.clearRect(0,0,w,h);ctx.save();ctx.translate(w,0);ctx.scale(-1,1);
   ctx.drawImage(results.image,0,0,w,h);ctx.restore();

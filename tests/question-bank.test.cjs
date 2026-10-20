@@ -148,3 +148,17 @@ assert.equal(run('getCurrentClass().form'),1,'new class inherits chosen form');
 run('changeForm(2);');
 assert.equal(run('selectedForm()'),2,'existing class can switch forms');
 console.log('Passed: choosing a form before class creation and inheriting the selection.');
+
+assert.equal(run('normalizeDB({settings:{}}).settings.palmHoldMs'),800,'old settings retain standard hold');
+run('setPalmHoldMs(1500); DB=loadDB();');
+assert.equal(run('DB.settings.palmHoldMs'),1500,'palm timing survives reload');
+assert.equal(elements.get('palmHoldQuick').value,'1500');
+assert.equal(elements.get('palmHold').value,'1500');
+assert.equal(elements.get('palmHoldHint').textContent,'Hold 1.5s · lower hand to reset');
+run('setPalmHoldMs(12);');
+assert.equal(run('DB.settings.palmHoldMs'),1500,'invalid duration ignored');
+storageFails=true;
+run('setPalmHoldMs(2000);');
+assert.equal(run('DB.settings.palmHoldMs'),1500,'failed save restores prior hold duration');
+storageFails=false;
+console.log('Passed: palm duration persistence, controls, instructions and failed-save rollback.');

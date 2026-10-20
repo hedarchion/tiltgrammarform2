@@ -88,7 +88,9 @@ Each topic has five constructions with twenty named contexts. Rebuild using
 Open-palm control is the default; choose buttons/arrow keys or optional head tilt
 from **Answer controls** before starting, or **CHANGE** during a question. The
 mirrored preview draws hand landmarks and left/right guides. Lower your hand,
-then show one open hand inside a guide for 0.8 seconds. A progress bar confirms
+then show one open hand inside a guide for the selected hold duration (0.8 seconds by default). Choose **Palm hold** in
+the preview or **Teacher → Palm controls** to set 0.4–3 seconds. The setting is
+saved on this device; changing it resets any partial hold. A progress bar confirms
 the hold; lower the hand again to reset. Small/outside hands are ignored, multiple
 hands inside the guide block selection, and stale or interrupted holds reset.
 This limits accidental input but cannot identify who owns a hand. Keep the active
