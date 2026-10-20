@@ -1,0 +1,5 @@
+__pycache__/
+.DS_Store
+# Student images are local classroom data, never repository content.
+student-photos/*
+!student-photos/.gitkeep
