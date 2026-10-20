@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261020-palm-duration">
+  <link rel="stylesheet" href="styles.css?v=20261020-podium">
   <link rel="stylesheet" href="glass.css">
   <script src="vendor/face-api.min.js"></script>
   <script defer src="vendor/hands/hands.js"></script>
@@ -299,12 +299,10 @@
             <button class="btn mini" id="showLbBtn" type="button">SHOW RANKS</button>
             <button class="btn mini" id="calibrateBtn" type="button">RECALIBRATE</button>
           </div>
-          <label class="field">Leaderboard every
-            <input class="num-input" id="lbEvery" type="number" min="1" max="20" value="3"> rounds
+          <label class="field">Leaderboard after
+            <input class="num-input" id="lbEvery" type="number" min="1" max="20" value="3"> completed turns
           </label>
-          <label class="field">Or every
-            <input class="num-input" id="lbSeconds" type="number" min="30" max="600" step="10" value="120"> seconds
-          </label>
+          <p class="drawer-hint">The podium appears after every 3 completed player turns by default.</p>
         </section>
 
         <section class="drawer-section">
@@ -392,8 +390,8 @@
 
   <script src="questions.js?v=20261020-classmemory"></script>
   <script src="questions-form1.js?v=20261020-forms"></script>
-  <script src="palm-control.js?v=20261020-palm-duration"></script>
-  <script src="app.js?v=20261020-palm-duration"></script>
+  <script src="palm-control.js?v=20261020-podium"></script>
+  <script src="app.js?v=20261020-podium"></script>
   <script src="glass.js"></script>
 </body>
 </html>

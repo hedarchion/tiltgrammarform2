@@ -1049,3 +1049,48 @@ body.teacher-open .drawer { transform: none; }
 
 .palm-hold-label { display:block; margin-top:10px; font-size:10px; letter-spacing:.08em; font-weight:900; }
 #palmHoldQuick { width:100%; min-height:44px; margin-top:5px; padding:8px; font-size:13px; }
+
+/* Portrait heads stay attached to the same body while ranks change. */
+.lb-list { display:block; }
+.podium-stage { position:relative; height:350px; margin:0 0 22px; isolation:isolate; border-bottom:2px solid rgba(255,255,255,.22); }
+.podium-stage::before { content:""; position:absolute; left:4%; right:4%; bottom:-5px; height:20px; border-radius:50%; background:rgba(0,8,23,.25); filter:blur(7px); z-index:-1; }
+.podium-step { position:absolute; bottom:0; width:30%; display:flex; flex-direction:column; justify-content:center; gap:8px; border:1px solid rgba(255,255,255,.32); border-radius:14px 14px 0 0; box-shadow:inset 0 3px 0 rgba(255,255,255,.3), 0 10px 30px rgba(0,0,0,.2); }
+.podium-step b { font-size:38px; font-weight:900; line-height:1; }
+.podium-step span { font-family:var(--pixel); font-size:10px; letter-spacing:.03em; }
+.podium-step.place-1 { left:35%; height:126px; color:#ffe7a5; background:linear-gradient(140deg,#8a6a2b,#58451e); }
+.podium-step.place-2 { left:1.6667%; height:88px; color:#e4f0ff; background:linear-gradient(140deg,#4b688b,#2b4260); }
+.podium-step.place-3 { left:68.3333%; height:52px; color:#ffe0c8; background:linear-gradient(140deg,#895b40,#593d30); gap:3px; }
+.podium-step.place-3 b { font-size:25px; }
+.podium-contestant { position:absolute; width:120px; height:200px; margin-left:-60px; z-index:2; display:flex; flex-direction:column; align-items:center; }
+.podium-contestant[data-rank="1"] { left:50%; bottom:126px; }
+.podium-contestant[data-rank="2"] { left:16.6667%; bottom:88px; }
+.podium-contestant[data-rank="3"] { left:83.3333%; bottom:52px; }
+.podium-contestant.leaving { left:94%; bottom:0; opacity:0; pointer-events:none; }
+.podium-change { height:20px; font-family:var(--pixel); font-size:6px; letter-spacing:.02em; color:var(--mint); white-space:nowrap; line-height:20px; }
+.podium-person { width:120px; height:168px; position:relative; flex-shrink:0; filter:drop-shadow(0 5px 5px rgba(0,0,0,.24)); }
+.podium-body { position:absolute; width:120px; height:108px; left:0; top:60px; }
+.podium-person .podium-head { position:absolute; left:24px; top:0; width:72px; height:72px; aspect-ratio:1; border-radius:50%; border:3px solid #e2ecf9; background:#274462; font-size:22px; box-shadow:0 3px 7px rgba(0,0,0,.3); z-index:1; }
+.podium-head img { width:100%; height:100%; object-fit:cover; }
+.podium-player { height:12px; font-size:9px; font-weight:900; color:#eef5ff; line-height:12px; }
+.podium-contestant.just-played .podium-head { border-color:var(--mint); box-shadow:0 0 0 4px rgba(124,255,203,.18); }
+.lb-runners { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.lb-runners:empty { display:none; }
+.lb-runners .lb-face-card { border-color:var(--line); background:rgba(255,255,255,.04); }
+.lb-runners .lb-face-card .lb-place { color:var(--muted); }
+.lb-runners .lb-portrait { width:70px; border-radius:50%; }
+.lb-runners .lb-points { font-size:16px; }
+@media (max-width:760px) {
+  .leaderboard-card { padding:22px 14px; }
+  .podium-stage { height:350px; }
+  .podium-step span { font-size:7px; }
+  .podium-person { transform:scale(.82); transform-origin:center bottom; }
+  .podium-contestant { height:195px; width:100px; margin-left:-50px; }
+  .podium-change { font-size:5px; }
+  .lb-runners { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .leaderboard-card { animation:none; }
+}
+.leaderboard-card { display:flex; flex-direction:column; }
+.lb-kicker, .lb-title, .lb-actions { flex-shrink:0; }
+.lb-list { min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 4px 4px; }

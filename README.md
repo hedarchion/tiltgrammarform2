@@ -102,3 +102,14 @@ remains available. Face loss does not pause palm/button play. Hand inference run
 locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
 (Apache 2.0); video is not uploaded. Camera permission is needed only for gestures
 or photo capture. `node tests/palm-control.test.cjs` checks input gating.
+
+## Podium leaderboard
+
+The leaderboard opens after every three completed player turns by default
+(configurable in Teacher → Session). There is no time-based interruption; opening
+Ranks manually does not reset that count. Only players who finished a turn join
+the standings. The top three have portrait heads attached to jersey characters
+on second/first/third-place podium steps. When ranks change, characters move from
+their previous positions, including down off the podium. Previous ranks are saved
+per class; numbered players use their number as the head. Reduced-motion settings
+show the final positions immediately. The full standings continue below the podium.

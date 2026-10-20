@@ -146,7 +146,42 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   await run('startTurn(currentStudents().at(-1));');
   assert.equal(run('phase'),'countdown','saved numbered player returns without face detection');
   assert.equal(run('currentStudents().length'),beforeNumbered+1,'reuses numbered score record');
+  // Automatic board cadence counts completed turns; a manual view does not consume them.
+  run('session=null; createClass("Podium test"); DB.settings.lbEvery=3; DB.settings.music=false; DB.settings.sfx=false; session={active:true,rounds:0,roundsSinceBoard:0,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
+  run('getCurrentClass().students=[normalizeStudent({id:"gold",numbered:true}),normalizeStudent({id:"silver",numbered:true}),normalizeStudent({id:"bronze",numbered:true}),normalizeStudent({id:"new",numbered:true,totalScore:9999})];');
+  for(let turn=0;turn<3;turn++) {
+    run(`startRound(currentStudents()[${turn}]); round.results=Array(8).fill("wrong"); finishRound();`);
+    assert.equal(run('boardDue()'),turn===2,'leaderboard due only after third completed turn');
+    if(turn===0) {
+      run('showLeaderboard({after:"idle"});');
+      assert.equal(run('session.roundsSinceBoard'),1,'manual Ranks preserves automatic cadence');
+      run('hideLeaderboard();');
+    }
+    run('nextPlayer();');
+  }
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'),false,'third completed turn shows leaderboard');
+  assert.equal(run('session.roundsSinceBoard'),0,'automatic reveal starts next group of three');
+  assert.equal(run('rankedPlayers().length'),3,'unplayed profiles stay off podium');
+  run('currentStudents()[0].totalScore=300;currentStudents()[1].totalScore=200;currentStudents()[2].totalScore=100;showLeaderboard({after:"idle"});');
+  run('currentStudents()[0].totalScore=50;currentStudents()[2].totalScore=400;');
+  assert.ok(run(`leaderboardRows().includes('data-rank="1" data-prior-rank="3"')`),'promotion starts from old step');
+  assert.ok(run(`leaderboardRows().includes('data-rank="3" data-prior-rank="1"')`),'demotion starts from old step');
+  run('showLeaderboard({after:"idle"}); DB=loadDB();');
+  assert.equal(run('getCurrentClass().leaderboardRanks.bronze'),1,'prior ranks saved per class');
+  assert.ok(run('leaderboardRows().includes("podium-body")'),'portraits attach to bodies');
+  const animations=[];
+  const figures=[{dataset:{rank:"1",priorRank:"3"},animate:(frames,options)=>animations.push({frames,options})},
+    {dataset:{rank:"4",priorRank:"2"},animate:(frames,options)=>animations.push({frames,options})}];
+  nodes.get('leaderboardList').querySelector=()=>({querySelectorAll:()=>figures,getBoundingClientRect:()=>({width:600})});
+  context.matchMedia=()=>({matches:false});
+  run('animatePodium();');
+  assert.ok(animations[0].frames[0].transform.includes('74px'),'promotion starts at lower podium height');
+  assert.equal(animations[1].frames.at(-1).opacity,0,'departing player steps off podium');
+  context.matchMedia=()=>({matches:true});
+  run('animatePodium();');
+  assert.equal(animations.length,2,'reduced motion skips rank movement');
   await Promise.resolve();
   assert.deepEqual(modelLoads, ['detector', 'landmarks', 'recognition']);
+  console.log('Passed: three-turn leaderboard cadence, manual view counter, rank persistence, attached character bodies, promotion/demotion and reduced motion.');
   console.log('Passed: local face recognition, stable multi-frame identity, ambiguity rejection, profile persistence/learning, existing-photo indexing, multiple-face rejection, scores and class isolation.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

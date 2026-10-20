@@ -128,7 +128,6 @@ const defaultSettings = {
   sfx: true,
   music: true,
   lbEvery: 3,
-  lbSeconds: 120,
   tiltThreshold: 12,
   tiltHoldMs: 550,
   invertTilt: false
@@ -179,7 +178,6 @@ function normalizeDB(raw) {
     db.settings.sfx = raw.settings.sfx !== false;
     db.settings.music = raw.settings.music !== false;
     db.settings.lbEvery = clamp(Number(raw.settings.lbEvery) || 3, 1, 20);
-    db.settings.lbSeconds = clamp(Number(raw.settings.lbSeconds) || 120, 30, 600);
   }
   if (raw.classes && typeof raw.classes === "object") {
     Object.entries(raw.classes).forEach(([id, value]) => {
@@ -191,6 +189,10 @@ function normalizeDB(raw) {
         form: value.form === 1 ? 1 : 2,
         createdAt: Number(value.createdAt) || Date.now(),
         students,
+        leaderboardRanks: value.leaderboardRanks && typeof value.leaderboardRanks === "object"
+          ? Object.fromEntries(students.filter(student => Number.isInteger(value.leaderboardRanks[student.id])
+            && value.leaderboardRanks[student.id] > 0 && value.leaderboardRanks[student.id] <= students.length)
+            .map(student => [student.id, value.leaderboardRanks[student.id]])) : {},
         usedQuestionIds: Array.isArray(value.usedQuestionIds)
           ? [...new Set(value.usedQuestionIds.filter(id => typeof id === "string" && id.length < 100))] : []
       };
@@ -244,7 +246,6 @@ let calibrationSamples = [];
 let neutralCalibrated = false;
 let cameraGeneration = 0;
 let baseRoll = 0;
-let sessionClock = null;
 let phase = "lobby";
 let session = null;
 let activeStudentId = null;
@@ -255,6 +256,7 @@ let lostShown = false;
 let lostContinueUntil = 0;
 let gameTimers = new Set();
 let boardContext = null;
+let boardRevision = 0;
 let toastTimer = null;
 let audioContext = null;
 let sfxGain = null;
@@ -561,6 +563,7 @@ function hideGameOverlays() {
 }
 
 function hideLeaderboard() {
+  boardRevision += 1;
   hideOverlay("leaderboardOverlay");
   boardContext = null;
 }
@@ -1107,7 +1110,6 @@ function renderSettings() {
   $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
   $("invertTiltToggle").classList.toggle("on", DB.settings.invertTilt);
   if (document.activeElement !== $("lbEvery")) $("lbEvery").value = String(DB.settings.lbEvery);
-  if (document.activeElement !== $("lbSeconds")) $("lbSeconds").value = String(DB.settings.lbSeconds);
   updateSoundUI();
 }
 
@@ -1201,8 +1203,6 @@ function deleteClass() {
 }
 
 function abortSession() {
-  if (sessionClock) clearInterval(sessionClock);
-  sessionClock = null;
   session = null;
   phase = "lobby";
   round = null;
@@ -1241,7 +1241,6 @@ function startSession() {
     startedAt: Date.now(),
     rounds: 0,
     roundsSinceBoard: 0,
-    lastBoardAt: Date.now(),
     questionDeck: shuffledQuestions(),
     classId: cls.id
   };
@@ -1253,18 +1252,7 @@ function startSession() {
   showScreen("lobby");
   enterIdle();
   sfx.start();
-  startSessionClock();
   toast("Class ready. Start a numbered player, capture a photo, or pick a saved card.", "good", 3200);
-}
-
-function startSessionClock() {
-  if (sessionClock) clearInterval(sessionClock);
-  sessionClock = setInterval(() => {
-    if (!session?.active || document.hidden || phase !== "idle" || isUiBlocking()) return;
-    if (Date.now() - session.lastBoardAt >= DB.settings.lbSeconds * 1000) {
-      showLeaderboard({ after: "idle", auto: true });
-    }
-  }, 1000);
 }
 
 function stopSession() {
@@ -1274,8 +1262,6 @@ function stopSession() {
   }
   sfx.stop();
   stopMusic();
-  if (sessionClock) clearInterval(sessionClock);
-  sessionClock = null;
   session.active = false;
   phase = "lobby";
   round = null;
@@ -1316,8 +1302,6 @@ function enterIdle() {
 function showLobby() {
   clearGameTimers();
   stopMusic();
-  if (sessionClock) clearInterval(sessionClock);
-  sessionClock = null;
   phase = "lobby";
   session = null;
   round = null;
@@ -1916,8 +1900,7 @@ function showRoundOverlay(result) {
 
 function boardDue() {
   if (!session?.active) return false;
-  return session.roundsSinceBoard >= DB.settings.lbEvery
-    || Date.now() - session.lastBoardAt >= DB.settings.lbSeconds * 1000;
+  return session.roundsSinceBoard >= DB.settings.lbEvery;
 }
 
 function nextPlayer() {
@@ -1931,30 +1914,85 @@ function closeRoundToLeaderboard() {
   if (phase !== "round") return;
   $("roundOverlay").classList.add("hidden");
   enterIdle();
-  showLeaderboard({ after: "idle", auto: true });
+  showLeaderboard({ after: "idle" });
+}
+
+function rankedPlayers() {
+  return [...currentStudents()].filter(student => student.games > 0).sort(compareStudents);
+}
+
+function podiumCharacter(student, rank, priorRank, leaving = false) {
+  const playerNumber = currentStudents().findIndex(item => item.id === student.id) + 1;
+  const change = priorRank ? priorRank - rank : 0;
+  const movement = leaving ? "STEPPING DOWN" : !priorRank ? "ON THE PODIUM" : change > 0 ? `↑ UP ${change}` : change < 0 ? `↓ DOWN ${-change}` : "HOLDING STRONG";
+  const shirt = rank === 1 ? "#f3c654" : rank === 2 ? "#91bbed" : "#f1a478";
+  return `<div class="podium-contestant ${leaving ? "leaving" : ""} ${student.id === lastFinishedId ? "just-played" : ""}"
+      data-rank="${rank}" data-prior-rank="${priorRank || 0}" style="--shirt:${shirt}"
+      ${leaving ? 'aria-hidden="true"' : `aria-label="Rank ${rank}, player ${playerNumber}, ${student.totalScore || 0} points, ${movement}"`}>
+      <div class="podium-change">${movement}</div>
+      <div class="podium-person">
+        <svg class="podium-body" viewBox="0 0 120 108" aria-hidden="true">
+          <path d="M52 4h16v19H52z" fill="#dfbda8"/>
+          <path d="M40 18 23 28 10 62l12 5 16-28v29h44V39l16 28 12-5-13-34-17-10Z" fill="var(--shirt)" stroke="#142b43" stroke-width="2" stroke-linejoin="round"/>
+          <path d="m10 62-3 10a7 7 0 0 0 13 4l2-9m76 0 2 9a7 7 0 0 0 13-4l-3-10" fill="#dfbda8"/>
+          <path d="M38 64h44l-4 33H63l-3-22-3 22H42z" fill="#233f60"/>
+          <path d="M41 94h17v11H35q-3-8 6-11m22 0h16q9 3 6 11H63z" fill="#eef5fc" stroke="#142b43" stroke-width="2"/>
+          <circle cx="60" cy="40" r="10" fill="#fff" fill-opacity=".8"/><text x="60" y="45" text-anchor="middle" font-size="14" font-weight="900" fill="#233f60">${leaving ? "★" : rank}</text>
+        </svg>
+        ${avatarHTML(student, "lb-portrait podium-head")}
+      </div>
+      <div class="podium-player">PLAYER ${playerNumber}</div>
+    </div>`;
 }
 
 function leaderboardRows() {
-  const students = [...currentStudents()].sort(compareStudents);
-  if (!students.length) return '<div class="lb-empty">Capture a player photo and finish a round to join the board.</div>';
-  return students.map((student, index) => `
-    <article class="lb-face-card ${index < 3 ? "podium" : ""} ${student.id === lastFinishedId ? "me" : ""}" aria-label="Rank ${index + 1}, ${student.totalScore || 0} points">
-      <div class="lb-place">${index === 0 ? "★ " : ""}#${index + 1}</div>
+  const students = rankedPlayers();
+  if (!students.length) return '<div class="lb-empty">Finish a turn to join the podium.</div>';
+  const previous = getCurrentClass()?.leaderboardRanks || {};
+  const top = students.slice(0, 3);
+  const departing = students.filter((student, index) => index >= 3 && previous[student.id] <= 3);
+  const stage = `<div class="podium-stage" aria-label="Top three podium">
+    ${top.map((student, index) => `<div class="podium-step place-${index + 1}"><b>${index + 1}</b><span>${student.totalScore || 0} PTS</span></div>`).join("")}
+    ${top.map((student, index) => podiumCharacter(student, index + 1, previous[student.id])).join("")}
+    ${departing.map(student => podiumCharacter(student, 4, previous[student.id], true)).join("")}
+  </div>`;
+  return stage + `<div class="lb-runners">` + students.slice(3).map((student, index) => `
+    <article class="lb-face-card ${student.id === lastFinishedId ? "me" : ""}" aria-label="Rank ${index + 4}, ${student.totalScore || 0} points">
+      <div class="lb-place">#${index + 4}</div>
       ${avatarHTML(student, "lb-portrait")}
       <div class="lb-points">${student.totalScore || 0}<span>POINTS</span></div>
       <div class="lb-face-stats"><span><b>${student.bestStreak || 0}</b> BEST STREAK</span><span><b>${accuracyLabel(student)}</b> ACCURACY</span></div>
       ${student.id === lastFinishedId ? '<div class="lb-latest">JUST PLAYED</div>' : ""}
-    </article>`).join("");
+    </article>`).join("") + `</div>`;
+}
+
+function animatePodium() {
+  const stage = $("leaderboardList").querySelector(".podium-stage");
+  if (!stage || !stage.querySelectorAll || typeof matchMedia !== "function" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const width = stage.getBoundingClientRect().width;
+  const position = rank => ({x:rank === 1 ? .5 : rank === 2 ? 1/6 : rank === 3 ? 5/6 : .94,
+    y:rank === 1 ? 126 : rank === 2 ? 88 : rank === 3 ? 52 : 0});
+  stage.querySelectorAll(".podium-contestant").forEach((figure, index) => {
+    const rank = Number(figure.dataset.rank), prior = Number(figure.dataset.priorRank);
+    const target = position(rank);
+    const origin = prior ? position(prior) : {x:target.x,y:0};
+    const dx = (origin.x - target.x) * width, dy = target.y - origin.y;
+    if (figure.animate && (dx || dy)) figure.animate([
+      {transform:`translate(${dx}px, ${dy}px)`, opacity:prior ? 1 : 0},
+      {transform:`translate(${dx * .12}px, ${dy * .12 - 9}px)`, opacity:1, offset:.8},
+      {transform:"translate(0, 0)",opacity:rank > 3 ? 0 : 1}
+    ], {duration:1100,delay:index * 100,easing:"cubic-bezier(.23,1,.32,1)",fill:"both"});
+  });
 }
 
 function showLeaderboard(options) {
+  const revision = ++boardRevision;
   const config = options || {};
   const final = Boolean(config.final);
   const fallbackAfter = final ? "lobby" : phase === "play" ? "resume" : "idle";
   boardContext = { final, after: config.after || fallbackAfter };
   if (session?.active) {
-    session.lastBoardAt = Date.now();
-    session.roundsSinceBoard = 0;
+    if (config.auto) session.roundsSinceBoard = 0;
   }
   hideOverlay("countdownOverlay");
   hideOverlay("roundOverlay");
@@ -1963,12 +2001,18 @@ function showLeaderboard(options) {
   $("closeLeaderboardBtn").textContent = final || boardContext.after === "lobby" ? "BACK TO CLASS" : "BACK TO GAME";
   $("leaderboardList").innerHTML = leaderboardRows();
   $("leaderboardOverlay").classList.remove("hidden");
+  animatePodium();
+  const cls = getCurrentClass();
+  if (cls) {
+    cls.leaderboardRanks = Object.fromEntries(rankedPlayers().map((student, index) => [student.id, index + 1]));
+    saveDB();
+  }
   sfx.board();
   const seconds = final ? 15 : 10;
   let left = seconds;
   $("lbCount").textContent = String(left);
   const tick = () => {
-    if ($("leaderboardOverlay").classList.contains("hidden")) return;
+    if (revision !== boardRevision || $("leaderboardOverlay").classList.contains("hidden")) return;
     left -= 1;
     $("lbCount").textContent = String(Math.max(0, left));
     if (left <= 0) closeLeaderboard();
@@ -2064,15 +2108,15 @@ function bindEvents() {
   $("roundLeaderboardBtn").addEventListener("click", closeRoundToLeaderboard);
   $("closeLeaderboardBtn").addEventListener("click", closeLeaderboard);
   $("leaderboardBtn").addEventListener("click", () => {
-    if (phase === "play") showLeaderboard({ after: "resume", auto: true });
-    else if (session?.active) showLeaderboard({ after: "idle", auto: true });
-    else showLeaderboard({ after: "lobby", auto: true });
+    if (phase === "play") showLeaderboard({ after: "resume" });
+    else if (session?.active) showLeaderboard({ after: "idle" });
+    else showLeaderboard({ after: "lobby" });
   });
   $("showLbBtn").addEventListener("click", () => {
     closeTeacherPanel();
-    if (phase === "play") showLeaderboard({ after: "resume", auto: true });
-    else if (session?.active) showLeaderboard({ after: "idle", auto: true });
-    else showLeaderboard({ after: "lobby", auto: true });
+    if (phase === "play") showLeaderboard({ after: "resume" });
+    else if (session?.active) showLeaderboard({ after: "idle" });
+    else showLeaderboard({ after: "lobby" });
   });
   $("manageBtn").addEventListener("click", openTeacher);
   $("teacherBtn").addEventListener("click", openTeacher);
@@ -2166,14 +2210,6 @@ function bindEvents() {
   });
   $("lbEvery").addEventListener("blur", () => {
     $("lbEvery").value = String(DB.settings.lbEvery);
-  });
-  $("lbSeconds").addEventListener("input", () => {
-    const value = clamp(Number($("lbSeconds").value) || 120, 30, 600);
-    DB.settings.lbSeconds = value;
-    saveDB();
-  });
-  $("lbSeconds").addEventListener("blur", () => {
-    $("lbSeconds").value = String(DB.settings.lbSeconds);
   });
   $("lostContinueBtn").addEventListener("click", () => {
     lostContinueUntil = Date.now() + 60000;
