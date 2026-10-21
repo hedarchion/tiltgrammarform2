@@ -1098,3 +1098,11 @@ body.teacher-open .drawer { transform: none; }
 .camera-control { min-height:44px; padding:10px 12px; }
 .camera-control[aria-pressed="true"] { color:var(--mint); border-color:rgba(124,255,203,.6); }
 @media (max-width:760px) { .camera-control { padding:8px; font-size:6px; } }
+
+.developer-credit {
+  margin-top: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
