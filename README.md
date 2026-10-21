@@ -130,3 +130,269 @@ frequency and session controls live in the Teacher Console. The player screen
 keeps large answers, hand tracking feedback and the read-only hold instruction.
 **Enable camera / Stop camera** stays in the game header; enabling it requests
 browser camera permission when needed.
+
+## Prompt to build a similar app
+
+Copy the prompt below into your coding assistant to build a similar classroom game.
+Change the app name, subject, and age group to suit your classroom. This is a build
+brief for a new app; it includes suggested features and implementation choices
+rather than a statement that every feature is implemented in Grammar Tilt.
+
+```text
+Build a complete, working classroom learning game called “Grammar Arcade”.
+
+Act as an experienced educational app developer and UI designer. Create a polished browser app that a teacher can use on a laptop connected to a classroom projector. Students take turns answering questions using large buttons, keyboard arrows, or camera-based gestures.
+
+The experience should feel like a lively arcade game while keeping the learning content clear and easy to read.
+
+PURPOSE AND AUDIENCE
+
+Design for Malaysian lower-secondary English learners, with separate Form 1 and Form 2 question banks.
+
+A teacher should be able to open the app, select a class, and begin within a minute. Students should be able to participate without accounts, email addresses, or typing their names.
+
+Support approximately 30 students taking multiple turns, with scores and question history continuing across different days on the same browser.
+
+CORE CLASSROOM FLOW
+
+1. The teacher creates or selects a class.
+2. The teacher chooses the grammar level and answer controls.
+3. A student selects an existing player card or creates a new numbered player.
+4. Optionally, the student captures a photo to use as their avatar.
+5. A three-second countdown introduces the turn.
+6. The student answers eight grammar questions.
+7. If the student makes exactly one mistake across those eight questions, offer one additional redemption question. A correct redemption restores the lost mark, up to 8/8.
+8. Show the student’s results and add their points to their saved total.
+9. Move smoothly to the next student.
+10. Show the class leaderboard after every three completed turns by default.
+
+Keep this flow quick enough for a real classroom.
+
+QUESTION FORMAT AND QUALITY
+
+Each question displays:
+- One short sentence containing a clearly underlined grammatical error.
+- Two possible replacements, presented as large left and right answer cards.
+- Exactly one unambiguously correct answer.
+- A short explanation after the answer.
+
+Example:
+Sentence: “Much people came to the school fair.”
+Underlined error: “Much”
+Choices: “Many” and “A little”
+Correct answer: “Many”
+Explanation: “Use ‘many’ with plural countable nouns such as ‘people’.”
+
+For Form 1, cover:
+- Present simple
+- Present continuous
+- Past simple
+- Past continuous
+- Comparatives
+- Superlatives
+- A/an
+- Some/any
+- Much/many
+- Countable plurals
+
+For Form 2, provide a broader selection of suitable lower-secondary grammar topics.
+
+Use familiar school, home, hobby, food, sport, and community contexts. Keep vocabulary appropriate to the selected level. Avoid ambiguous sentences and unnatural distractors.
+
+Use a structured question format containing:
+- Stable question ID
+- Level
+- Topic
+- Construction ID
+- Sentence
+- Underlined error
+- Two answer options
+- Correct answer
+- Explanation
+
+Construction IDs should group questions that test the same sentence pattern, including variants where only a name or object changes.
+
+Target 1,000 questions per level. Build and validate a smaller representative bank first, then expand it systematically. Do not fill the bank with superficial duplicates or claim syllabus approval without supporting references.
+
+QUESTION SELECTION
+
+Maintain separate, persistent used-question histories for each class and level.
+
+- Balance topic coverage.
+- Randomise which side contains the correct answer.
+- Avoid repeating the same sentence construction within the next 24 reserved questions whenever alternatives exist.
+- Reserve and save question IDs before displaying a turn.
+- Reloading or interrupting a turn must not make its reserved questions available again.
+- Include redemption questions in the used history.
+- Resetting scores must preserve question history.
+- When the bank is exhausted, explain that more content is needed. Do not silently recycle old questions.
+- Keep IDs stable if the question bank is reordered.
+
+ANSWER CONTROLS
+
+Provide three modes:
+
+A. Buttons and keyboard
+- Large, clickable or tappable answer cards.
+- Left and right arrow keys.
+- Fully playable without camera permission.
+
+B. Open-palm gestures
+- Process camera frames locally in the browser.
+- Show a mirrored preview with visible hand landmarks and clear left/right selection zones.
+- Hold one open palm in a zone to select that answer.
+- Default hold duration: 0.8 seconds.
+- Teacher-adjustable duration: 0.4–3 seconds.
+- Show visible hold progress.
+- Require the student to lower their hand before another answer can register.
+- Block selection when multiple hands are inside the answer zones.
+- Provide useful guidance for hands that are too small or outside the zones.
+- Brief tracking gaps should pause progress; longer gaps should reset it.
+- Prevent a held gesture from accidentally answering the next question.
+
+C. Optional head tilt
+- Calibrate the neutral head position during the countdown.
+- Tilt left or right and hold to confirm.
+- Include adjustable sensitivity, hold duration, recalibration, and direction inversion.
+- Require a return to neutral before another answer.
+
+Buttons must remain available when gesture tracking struggles. Camera failure must never prevent ordinary button play.
+
+PLAYER PROFILES
+
+Make numbered players the simplest entry method:
+- “New numbered player” creates Player 1, Player 2, and so on.
+- Returning students tap their saved card.
+- Keep cumulative scores across turns and days.
+
+Offer optional photo avatars.
+
+If implementing returning-player face matching:
+- Perform recognition locally.
+- Require explicit confirmation before continuing a matched player’s score.
+- Ask the user to choose a saved profile when recognition is uncertain.
+- Never silently merge profiles or transfer scores.
+- Reject recognition when multiple faces are visible.
+- Keep manual player selection available.
+- Treat face matching as optional and fallible.
+
+SCORING AND FEEDBACK
+
+Track:
+- Round marks out of eight
+- Cumulative points
+- Current streak
+- Best streak
+- Completed turns
+- Successful redemptions
+
+Use a simple, documented scoring formula with a modest streak bonus. Display marks and arcade points separately.
+
+Provide immediate feedback with text, colour, and optional sound. Show the correct replacement and explanation after mistakes. Keep the tone encouraging.
+
+Celebrate strong results with brief animations, stars, and confetti.
+
+LEADERBOARD
+
+Create an attractive podium:
+- First place in the centre, second on the left, third on the right.
+- Use each player’s photo or number as the character’s head.
+- Animate position changes when ranks change.
+- List all other players below.
+- Include only players who have completed a turn.
+- Define consistent tie-breaking rules.
+- Respect reduced-motion preferences.
+
+Open the leaderboard after every three completed turns, configurable by the teacher. Allow manual opening between turns. Do not interrupt an active question.
+
+TEACHER CONSOLE
+
+Put teacher controls in a side drawer:
+- Create, select, and delete classes
+- View player cards and scores
+- Select grammar level before a session
+- Select answer mode
+- Start and stop sessions
+- Set leaderboard frequency
+- Adjust palm and tilt settings
+- Recalibrate tracking
+- Toggle music and sound effects
+- Reset scores
+- View remaining question counts and camera/model status
+
+Confirm destructive actions. Clearly explain what each reset deletes.
+
+VISUAL DESIGN
+
+Combine a modern glass interface with a restrained retro arcade style:
+- Deep navy background
+- Translucent panels with subtle borders and highlights
+- Mint, gold, coral, and lavender accents
+- Pixel-style headings used sparingly
+- Rounded, highly readable typography for sentences and answers
+- Large answer cards and generous spacing
+- Clear player identity, question progress, score, and streak indicators
+- Subtle transitions and responsive button feedback
+
+Prioritise projector readability over decoration. Keep question text large, contrast strong, and settings away from the main play area.
+
+Support desktop, tablet, smaller screens, and fullscreen mode. Avoid clipping and horizontal scrolling.
+
+ACCESSIBILITY
+
+- Full keyboard access and visible focus indicators.
+- Real buttons and labelled inputs.
+- Feedback that does not rely on colour alone.
+- Reduced-motion support.
+- Sound can be disabled.
+- Camera use is optional.
+- Clear instructions that match the selected control mode.
+
+TECHNICAL APPROACH AND STORAGE
+
+Prefer a lightweight static web app using HTML, CSS, and JavaScript, with no required backend or paid services. If an existing project has a suitable framework, follow its conventions.
+
+Separate question data, game state, storage, gesture tracking, and rendering into maintainable modules.
+
+Persist:
+- Classes
+- Player profiles and optional photos
+- Completed-turn scores
+- Class settings
+- Used-question history
+- Previous leaderboard positions
+
+Use localStorage for small records and IndexedDB if photos or model-related records need more space. Handle unavailable or full storage gracefully.
+
+Request camera access only after an explicit user action. Stop camera tracks when the user disables the camera.
+
+Do not save or upload live video. Keep photos and any face descriptors on the device. Explain that records belong to this browser and site address, do not sync between devices, and may be lost if browser data is cleared.
+
+Bundle required tracking assets where practical. Provide useful loading, permission-denied, unsupported-browser, and model-failure states. Document HTTPS requirements for deployed camera access.
+
+DELIVERY AND VERIFICATION
+
+Build the actual app, not just a visual mockup. All visible controls must work.
+
+Implement in stages:
+1. Complete button-based classroom gameplay and persistence.
+2. Add polished results, leaderboard, and teacher settings.
+3. Add palm control and optional head tilt.
+4. Add optional photo recognition.
+5. Expand and validate the question banks.
+
+Verify:
+- Eight-question turns and the exact redemption rule
+- Score persistence after reload
+- Isolation between classes and levels
+- Stable question IDs and non-repetition
+- Exhausted-bank behaviour
+- Prevention of duplicate gesture submissions
+- Camera-denied fallback
+- Safe handling of uncertain player matches
+- Keyboard operation and responsive layouts
+
+Provide the complete source, a README with local-run and static-hosting instructions, and a concise account of what works and any remaining limitations.
+
+Make reasonable implementation decisions and proceed. Ask only when an essential requirement cannot be inferred. Do not present simulated tracking or unfinished features as working functionality.
+```
