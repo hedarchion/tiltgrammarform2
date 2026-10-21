@@ -49,3 +49,36 @@ for (const holdMs of [400,600,800,1000,1500,2000,3000]) {
   assert.equal(P.step(custom,[left],400+holdMs,true,holdMs).answer,'left');
 }
 console.log('Passed: all seven palm hold durations and proportional progress.');
+
+// Realistic size changes scale both dimensions around the palm centre.
+function resized(points, scale) {
+  return points.map(p=>({x:.7+(p.x-.7)*scale,y:.6+(p.y-.6)*scale}));
+}
+assert.equal(P.describe(resized(left,.35)).eligible,true,'upright palm below old 10% width threshold is accepted');
+assert.equal(P.describe(resized(left,.1)).eligible,false,'genuinely small background palms remain excluded');
+function armed() {
+  const s=P.createState();P.step(s,[],0,true);P.step(s,[],350,true);return s;
+}
+const dropout=armed();
+P.step(dropout,[left],400,true);P.step(dropout,[left],600,true);
+assert.equal(P.step(dropout,[],650,true).ratio,.25,'brief loss keeps progress');
+assert.equal(P.step(dropout,[left],750,true).ratio,.25,'recovery does not count missing time');
+assert.equal(P.step(dropout,[left],950,true).ratio,.5);
+assert.ok(!P.step(dropout,[],1000,true).answer,'missing frame cannot submit');
+assert.equal(P.step(dropout,[left],1250,true).ratio,0,'late recovery restarts hold even without another missing frame');
+const expired=armed();
+P.step(expired,[left],400,true);P.step(expired,[left],600,true);
+assert.equal(P.step(expired,[],850,true).ratio,0,'long loss clears progress');
+const boundary=armed();
+P.step(boundary,[hand(.43)],400,true);P.step(boundary,[hand(.43)],600,true);
+assert.equal(P.step(boundary,[hand(.46)],700,true).ratio,.375,'small boundary movement preserves hold');
+assert.equal(P.step(boundary,[right],800,true).ratio,0,'crossing to other answer restarts hold');
+const repeated=armed();
+for(let t=400;t<=1200;t+=100) P.step(repeated,[left],t,true);
+P.step(repeated,[],1250,true);
+assert.ok(!P.step(repeated,[left],1350,true).answer,'brief loss after selection does not rearm');
+assert.equal(repeated.latched,true);
+const feedback=armed();
+assert.match(P.step(feedback,[resized(left,.1)],400,true).status,/too small/);
+assert.match(P.step(feedback,[hand(.98)],500,true).status,/inside a dashed guide/);
+console.log('Passed: smaller upright palms, background rejection, paused dropouts, recovery timeout, boundary jitter, repeat prevention and specific feedback.');

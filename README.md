@@ -90,8 +90,10 @@ under **Teacher → Game settings → Answer controls**. The
 mirrored preview draws hand landmarks and left/right guides. Lower your hand,
 then show one open hand inside a guide for the selected hold duration (0.8 seconds by default). Choose **Teacher → Palm controls** to set 0.4–3 seconds. The setting is
 saved on this device; changing it resets any partial hold. A progress bar confirms
-the hold; lower the hand again to reset. Small/outside hands are ignored, multiple
-hands inside the guide block selection, and stale or interrupted holds reset.
+the hold; lower the hand again to reset. Hand size uses both width and height so narrow upright palms can qualify.
+Small/outside hands get specific guidance, and multiple hands inside the guide block selection.
+Tracking losses up to 220 ms pause progress without counting missing time; longer losses
+reset the hold. A small margin at the centre guide edges reduces jitter.
 This limits accidental input but cannot identify who owns a hand. Keep the active
 player near the camera, and use the large answer buttons whenever tracking struggles.
 
