@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-clean">
-  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-clean" media="(min-width: 1101px) and (pointer: fine)">
-  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-clean" media="(max-width: 1100px), (pointer: coarse)">
+  <link rel="stylesheet" href="styles.css?v=20261022-palm-nav">
+  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-palm-nav" media="(min-width: 1101px) and (pointer: fine)">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-palm-nav" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
   <div class="app" id="app">
@@ -130,7 +130,8 @@
         <div class="turn-entry face-entry">
           <div class="portrait-preview"><canvas id="playerPreview" width="160" height="160" aria-label="Live player portrait preview"></canvas><span>◎</span></div>
           <div class="face-entry-actions">
-            <button class="btn primary" id="numberedPlayerBtn" type="button">NEW NUMBERED PLAYER</button>
+            <button class="btn ghost" id="idleRanksBtn" type="button">RANKS</button>
+            <button class="btn primary" id="numberedPlayerBtn" type="button">NEW PLAYER</button>
             <button class="btn ghost" id="startTurnBtn" type="button">CAPTURE &amp; PLAY</button>
             <p class="small-note">Your photo becomes your score card.<br>Photos, face memory and scores stay on this device.</p>
           </div>
@@ -164,7 +165,7 @@
 
         <div class="options-row">
           <button class="option-card left" id="optionLeft" type="button" data-side="0">
-            <span class="option-tag">◀ TILT LEFT</span>
+            <span class="option-tag"><span class="palm-cue palm-left" data-hand="L" role="img" aria-label="Left palm"></span></span>
             <span class="option-text" id="optionLeftText">Many</span>
             <span class="option-charge"><i></i></span>
           </button>
@@ -173,7 +174,7 @@
             <div class="palm-monitor">
               <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored preview identifying your left or right hand"></canvas>
               <div id="palmStatus" role="status">Tap Camera for instant palm controls</div>
-              <small id="palmInstantHint">Instant answer · left hand = left · right hand = right</small>
+              <small id="palmInstantHint">Lower your palm between choices</small>
             </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
             <div class="tilt-ring">
@@ -184,7 +185,7 @@
           </div>
 
           <button class="option-card right" id="optionRight" type="button" data-side="1">
-            <span class="option-tag">TILT RIGHT ▶</span>
+            <span class="option-tag"><span class="palm-cue palm-right" data-hand="R" role="img" aria-label="Right palm"></span></span>
             <span class="option-text" id="optionRightText">A little</span>
             <span class="option-charge"><i></i></span>
           </button>
@@ -226,8 +227,8 @@
         </div>
         <p class="small-note" id="roundSpeedBonus">Includes +0 speed points</p>
         <div class="round-actions">
+          <button class="btn ghost" id="roundLeaderboardBtn" type="button">RANKS</button>
           <button class="btn primary" id="nextPlayerBtn" type="button">NEXT PLAYER</button>
-          <button class="btn ghost" id="roundLeaderboardBtn" type="button">LEADERBOARD</button>
         </div>
         <div class="auto-hint" id="roundAutoHint">Next player in <span id="nextCount">8</span>s</div>
       </div>
@@ -240,7 +241,7 @@
         <div class="lb-list" id="leaderboardList"></div>
         <div class="lb-actions">
           <button class="btn primary" id="closeLeaderboardBtn" type="button">BACK TO GAME</button>
-          <div class="auto-hint">Auto-close in <span id="lbCount">8</span>s</div>
+          <div class="auto-hint" id="lbAutoHint">Auto-close in <span id="lbCount">8</span>s</div>
         </div>
       </div>
     </div>
@@ -334,7 +335,7 @@
         </details>
 
         <details class="drawer-section settings-group"><summary>PALM CONTROLS</summary>
-          <p class="drawer-hint">Answers register on the first detected open palm, anywhere in frame. Your left hand selects the left answer; your right hand selects the right answer. The mirrored preview matches your movements. Lower or close your hand between answers. No hold timer.</p>
+          <p class="drawer-hint">Open palm = instant choice, anywhere in frame. Left selects left; right selects right. Results: left opens ranks/menu, right continues. Player entry: right starts a numbered player. Ranks: right returns. Lower or close your hand between choices.</p>
         </details>
 
         <details class="drawer-section settings-group"><summary>TILT CONTROLS</summary>
@@ -397,8 +398,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-clean"></script>
-  <script src="app.js?v=20261022-clean"></script>
+  <script src="palm-control.js?v=20261022-palm-nav"></script>
+  <script src="app.js?v=20261022-palm-nav"></script>
 
 </body>
 </html>

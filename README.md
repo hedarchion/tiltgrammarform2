@@ -56,6 +56,23 @@ WebGL and reduced-transparency preferences retain a CSS glass fallback.
 with simpler surfaces, restrained effects and no decorative renderer. Both styles
 use the same immediate left/right palm selection and optional camera controls.
 
+## Palm navigation
+
+With Camera on and palm controls selected, the same hand gestures navigate the game.
+The answer cards show mirrored hand illustrations with L/R markers. Result actions
+stay in the same spatial order: left opens ranks (or the solo menu), right continues
+to the next player (or replays solo). On player entry, left opens ranks and right
+starts a new numbered player. On ranks, right returns to the game. On the home
+screen, right starts the selected mode. These actions use the existing touch buttons.
+
+One gesture triggers one action. Lower or close the hand between choices, including
+between screens; there is no dwell timer. Held hands cannot skip results, create
+multiple players or answer the next question. Stale camera results are discarded
+when screens change. Settings, photo confirmation and hidden tabs suspend palm
+input. Results and ranks wait for a gesture or tap while palm navigation is active.
+Camera-off and other control modes retain their existing automatic progression.
+The cues use one small local SVG, with no new image or model dependencies.
+
 ## Phone and tablet layout
 
 Lite uses a solid, high-contrast interface with a compact header,
@@ -191,7 +208,7 @@ labels to recover physical left/right, as specified in the
 Inference uses the lite model, detects up to two hands to catch ambiguous input,
 and runs on fresh video frames with no added wait between inference calls.
 
-**New numbered player** starts without a portrait or face recognition. Returning
+**New player** starts without a portrait or face recognition. Returning
 numbered players tap their numbered card to keep their score. Photo enrollment
 remains available. Face loss does not pause palm/button play. Hand inference runs
 locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
@@ -369,7 +386,7 @@ Buttons must remain available when gesture tracking struggles. Camera failure mu
 PLAYER PROFILES
 
 Make numbered players the simplest entry method:
-- “New numbered player” creates Player 1, Player 2, and so on.
+- “New player” creates Player 1, Player 2, and so on.
 - Returning students tap their saved card.
 - Keep cumulative scores across turns and days.
 

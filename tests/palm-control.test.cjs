@@ -67,6 +67,7 @@ const video={videoWidth:1280,videoHeight:720,
   cancelVideoFrameCallback(id){cancelled.push(id);frames.delete(id);}};
 const nodes={camera:video,palmPreview:{width:320,height:180,getContext:()=>draw},palmStatus:{textContent:''}};
 Object.assign(ctx,{$:id=>nodes[id],stream:{},controlMode:()=> 'palms',document:{hidden:false},
+  palmControlContext:()=>ctx.phase==='idle'||ctx.document.hidden?null:ctx.phase, handlePalmAction:side=>answers.push(side),
   performance:{now:()=> 1000},phase:'play',round:{answered:false},isPlayBlocked:()=>false,
   setCharge(){},clearCharge(){},HAND_CONNECTIONS:[],answer:side=>answers.push(side),
   setTimeout(fn,delay){const id=nextId++;timeouts.set(id,{fn,delay});return id;},clearTimeout(id){timeouts.delete(id);}});

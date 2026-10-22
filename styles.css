@@ -1200,3 +1200,49 @@ body .settings-group > summary, body .rules-details > summary {
   transform: rotate(-45deg);
 }
 .settings-group[open] > summary::after, .rules-details[open] > summary::after { transform: rotate(45deg); }
+
+/* The capsule and its portrait share one continuous curve. */
+body.theme-glass .roster-pill .avatar { border-radius: 50%; }
+body.theme-glass .roster-pill { padding: 8px; }
+
+/* Small local vector cues keep palm controls legible without extra text. */
+.palm-cue { display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: inherit; }
+.palm-cue::before, .palm-nav::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 46px;
+  flex: 0 0 40px;
+  background: currentColor;
+  -webkit-mask: url("palm.svg") center / contain no-repeat;
+  mask: url("palm.svg") center / contain no-repeat;
+}
+.palm-left::before, .palm-nav[data-palm="left"]::before { transform: scaleX(-1); }
+.palm-cue::after { content: attr(data-hand); font: 900 11px var(--body); }
+body .option-tag:has(.palm-cue) { line-height: 1; }
+.palm-nav::before { display: none; }
+body.palm-navigation .palm-nav { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+body.palm-navigation .palm-nav::before { display: block; width: 22px; height: 26px; flex-basis: 22px; }
+.face-entry-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 10px; }
+body .face-entry-actions .btn { min-width: 0; font: 900 13px var(--body); }
+.face-entry-actions #startTurnBtn, .face-entry-actions .small-note { grid-column: 1 / -1; }
+body .round-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body .round-actions .btn { min-width: 0; }
+@media (max-width: 600px) {
+  .palm-cue::before { width: 32px; height: 36px; flex-basis: 32px; }
+  body .round-actions .btn { font-size: 12px; padding-inline: 10px; }
+  body.palm-navigation .round-actions .btn { gap: 5px; }
+}
+
+/* Keep result navigation inside the viewport even on short Glass screens. */
+body.theme-glass .overlay { position: fixed; }
+body.theme-glass .round-card { width: min(620px, 100%); min-width: 0; max-height: calc(100dvh - 44px); overflow: auto; }
+@media (max-height: 700px) {
+  body.theme-glass .round-card { padding: 18px 16px; }
+  body.theme-glass .round-portrait { width: 48px; height: 48px; margin-bottom: 10px; }
+  body.theme-glass .round-name { font-size: 20px; margin-top: 6px; }
+  body.theme-glass .round-stars { font-size: 20px; margin-block: 6px; }
+  body.theme-glass .round-stats { margin-block: 12px; }
+  body.theme-glass .round-stats div { padding: 8px 4px; }
+  body.theme-glass #roundSpeedBonus { margin-block: 10px; font-size: 11px; }
+}

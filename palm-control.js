@@ -25,29 +25,29 @@ const PalmInput = (() => {
     const active = described.filter(h => h.eligible && h.open);
     state.lastAt=now;
     if (!enabled) {
-      // A palm shown during countdown/feedback cannot carry into the next answer.
+      // A palm shown during countdown/feedback cannot carry into the next choice.
       state.latched=active.length>0;
-      return {status:'Ready · lower or close your hand between answers',ratio:0};
+      return {status:'Ready · lower or close your hand between choices',ratio:0};
     }
     if (!active.length) {
       // One clear frame rearms immediately; there is no release timer either.
       state.latched=false;
       return {status:described.some(h=>!h.largeEnough) ? 'Hand too small · move closer to the camera'
-        : described.length ? 'Open your left or right hand to answer' : 'Raise your left or right open palm · instant answer',ratio:0};
+        : described.length ? 'Open your left or right hand to choose' : 'Raise your left or right open palm · instant selection',ratio:0};
     }
-    if (active.length>1) return {status:'Two open palms · show only the hand for your answer',ratio:0};
+    if (active.length>1) return {status:'Two open palms · show only the hand to choose',ratio:0};
     const hand=active[0], side=hand.side;
     if (!side) return {status:'Finding left or right hand · face your palm towards the camera',hand,ratio:0};
-    if (state.latched) return {status:'Lower or close your hand, then show your next answer',hand,ratio:0};
+    if (state.latched) return {status:'Lower or close your hand, then show your next choice',hand,ratio:0};
     state.latched=true;
-    return {status:`${side==='left'?'Left':'Right'} hand · answer selected`,hand,side,ratio:1,answer:side};
+    return {status:`${side==='left'?'Left':'Right'} hand · selected`,hand,side,ratio:1,answer:side};
   }
   return {describe,sideFromHandedness,createState,step};
 })();
 
 let palmEngine=null, palmLoading=null, palmTimer=null, palmBusy=false, palmFailed=false;
 let palmState=PalmInput.createState();
-let palmGeneration=0, palmRequestGeneration=-1, lastPalmPreviewAt=-Infinity;
+let palmGeneration=0, palmRequestGeneration=-1, palmScope=null, lastPalmPreviewAt=-Infinity;
 function palmStatus(text) { const el=$("palmStatus"); if(el.textContent!==text) el.textContent=text; }
 function resetPalm() { palmState=PalmInput.createState(true); if(typeof clearCharge==='function') clearCharge(); }
 function cancelPalmTick() {
@@ -56,16 +56,23 @@ function cancelPalmTick() {
   palmTimer=null;
 }
 function palmTrackingNeeded() {
-  if(!stream || controlMode()!=='palms' || document.hidden || !["play","countdown"].includes(phase)) return false;
-  if(typeof isTeacherOpen==='function' && isTeacherOpen()) return false;
-  if(phase==='play' && isPlayBlocked()) return false;
-  return phase!=='play' || !round?.answered || palmState.latched;
+  if (!stream || controlMode() !== 'palms' || document.hidden) return false;
+  const context = palmControlContext();
+  if (!context) return false;
+  return context !== 'play' || !round?.answered || palmState.latched;
 }
 function syncPalmLoop() {
-  if(palmTrackingNeeded()) ensurePalmLoop();
+  const context = palmControlContext();
+  if (context !== palmScope) {
+    palmScope = context;
+    palmGeneration += 1;
+    palmState.lastAt = null;
+  }
+  if (palmTrackingNeeded()) ensurePalmLoop();
   else {
-    palmGeneration+=1; cancelPalmTick();
-    if(document.hidden || typeof isTeacherOpen==='function' && isTeacherOpen() || isPlayBlocked()) resetPalm();
+    palmGeneration += 1;
+    cancelPalmTick();
+    if (!context) resetPalm();
   }
 }
 function stopPalmLoop() {
@@ -121,18 +128,22 @@ async function palmTick() {
   }
 }
 function updatePalmFeedback(now) {
-  if(controlMode()==='palms' && stream && phase==='play' && palmState.lastAt!==null && now-palmState.lastAt>1000) {
+  if(controlMode()==='palms' && stream && palmState.lastAt!==null && now-palmState.lastAt>1000) {
     resetPalm();
-    palmStatus('Tracking interrupted · lower or close your hand, or tap an answer');
+    palmStatus('Tracking interrupted · lower or close your hand, or tap a button');
   }
 }
 function handlePalmResults(results) {
   if(!palmTrackingNeeded() || palmRequestGeneration!==palmGeneration) return;
   const hands=results.multiHandLandmarks||[];
   const aspect=$("camera").videoWidth/$("camera").videoHeight || 16/9;
-  const result=PalmInput.step(palmState,hands,results.multiHandedness||[],performance.now(),phase==='play' && !!round && !round.answered && !isPlayBlocked(),aspect);
+  const context = palmControlContext();
+  const enabled = context !== 'countdown' && (context !== 'play' || !!round && !round.answered);
+  const result=PalmInput.step(palmState,hands,results.multiHandedness||[],performance.now(),enabled,aspect);
   palmStatus(result.status);
-  if(result.answer) answer(result.answer);
+  if(result.answer) handlePalmAction(result.answer);
+  // Navigation needs classification, but no hidden preview painting.
+  if (context !== "play") return;
   // Classification stays at full camera speed; only the small preview is capped.
   const now=performance.now();
   if(!result.answer && now-lastPalmPreviewAt<1000/12) return;

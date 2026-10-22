@@ -12,12 +12,13 @@ assert.equal(html.split('id="cameraToggleBtn"').length-1,1,'one shared camera to
 for (const id of ['palmHold','palmHoldHint','palmHoldQuick','controlModeBtn','recenterBtn','palmCameraBtn']) assert.ok(!html.includes(`id="${id}"`));
 function element(hidden = false) {
   const classes = new Set(hidden ? ['hidden'] : []);
+  const listeners = new Map();
   return {
     value: '', innerHTML: '', textContent: '', children: [], style: { setProperty() {} },
     classList: { add(...names) { names.forEach(n => classes.add(n)); }, remove(...names) { names.forEach(n => classes.delete(n)); },
       contains(n) { return classes.has(n); }, toggle(n, on) { if (on ?? !classes.has(n)) classes.add(n); else classes.delete(n); } },
     appendChild(child) { this.children.push(child); }, querySelector() { return element(); },
-    addEventListener() {}, setAttribute() {}, focus() {}, remove() {}, toDataURL() { return "data:image/jpeg;base64,dGVzdA=="; }, getContext() { return { clearRect() {}, translate() {}, scale() {}, drawImage() {} }; }
+    addEventListener(name, fn) { listeners.set(name, fn); }, click() { if (!this.disabled) listeners.get("click")?.(); }, setAttribute() {}, focus() {}, remove() {}, toDataURL() { return "data:image/jpeg;base64,dGVzdA=="; }, getContext() { return { clearRect() {}, translate() {}, scale() {}, drawImage() {} }; }
   };
 }
 const nodes = new Map([...html.matchAll(/<[^>]*\bid="([^"]+)"[^>]*>/g)].map(m => [m[1], element(/class="[^"]*\bhidden\b/.test(m[0]))]));
@@ -403,6 +404,68 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('round.answered=true;');
   assert.equal(run('faceTrackingNeeded()'), false, 'head tracking stops during answer feedback');
   assert.equal(animationRequests, 0, 'play and settings never start an animation loop');
+  // Real hand-result routing through the same buttons used by touch input.
+  run('stream=null; abortSession(); DB=normalizeDB(null); DB.settings.music=false; DB.settings.sfx=false; createClass("Palm navigation");');
+  run(readFileSync('palm-control.js', 'utf8'));
+  nodes.get('palmPreview').offsetParent = null;
+  run('palmEngine={async send(){}}; stream={}; renderControlMode(); showLobby();');
+  const openPalm = Array.from({length:21}, () => ({x:.5,y:.6}));
+  openPalm[0] = {x:.5,y:.8};
+  for (let i=0;i<4;i++) {
+    const base=5+i*4, x=.5+(i-1.5)*.06;
+    for (let j=0;j<4;j++) openPalm[base+j]={x,y:[.6,.5,.4,.2][j]};
+  }
+  const gesture = side => {
+    context.palmResult = {multiHandLandmarks:side?[openPalm]:[],
+      multiHandedness:side?[{label:side==='left'?'Right':'Left',score:.99}]:[]};
+    run('palmRequestGeneration=palmGeneration; handlePalmResults(palmResult);');
+  };
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'idle', 'right palm starts a class session');
+  gesture('right');
+  assert.equal(run('currentStudents().length'), 0, 'held start palm cannot also create a player');
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'countdown', 'right palm starts the next numbered player');
+  assert.equal(run('currentStudents().length'), 1);
+  gesture('right');
+  run('startRound(currentStudents()[0]);');
+  gesture('right');
+  assert.equal(run('round.answered'), false, 'navigation palm cannot carry into the first answer');
+  gesture(null); gesture('left');
+  assert.equal(run('round.answered'), true, 'fresh left palm still answers immediately');
+  run('round.results=Array(8).fill("wrong"); finishRound();');
+  gesture('right');
+  assert.equal(run('phase'), 'round', 'last answer cannot dismiss the result');
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'idle', 'right palm continues to next player entry');
+  gesture('right');
+  assert.equal(run('currentStudents().length'), 1, 'one gesture cannot skip entry and create another player');
+  gesture(null); gesture('left');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), false, 'left palm opens ranks');
+  gesture('right');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), false, 'held palm cannot close the next screen');
+  run('palmRequestGeneration=palmGeneration-1; handlePalmResults(palmResult);');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), false, 'stale inference cannot navigate');
+  gesture(null); gesture('right');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), true, 'right palm returns from ranks');
+  run('openTeacher();');
+  assert.equal(run('palmTrackingNeeded()'), false, 'settings suspend palm navigation');
+  gesture(null); gesture('right');
+  assert.equal(run('currentStudents().length'), 1, 'settings cannot start a player');
+  run('closeTeacherPanel(); pendingFaceCapture={};');
+  assert.equal(run('palmControlContext()'), null, 'palm navigation cannot confirm a photo identity');
+  run('pendingFaceCapture=null; stream=null; abortSession(); changePlayMode("single"); startSession(); startRound(currentStudents()[0]); stream={}; renderControlMode();');
+  run('round.results=Array(8).fill("wrong"); finishRound();');
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'countdown', 'right palm replays single player');
+  run('startRound(currentStudents()[0]); round.results=Array(8).fill("wrong"); finishRound();');
+  gesture(null); gesture('left');
+  assert.equal(run('phase'), 'lobby', 'left palm returns solo results to menu');
+  gesture('right');
+  assert.equal(run('phase'), 'lobby', 'held menu palm cannot restart the game');
+  run('stream=null; syncTracking();');
+  assert.equal(run('palmTrackingNeeded()'), false, 'camera-off navigation uses no inference');
+  console.log('Passed: instant palm navigation for class start, player entry, results, ranks, solo replay and menu; held/stale gesture, settings and photo-confirmation guards.');
   console.log('Passed: lazy model loading, recognition separation, no render loop, and face inference gated by explicit use, visibility, overlays and answer state.');
   console.log('Passed: three-turn leaderboard cadence, manual view counter, rank persistence, attached character bodies, promotion/demotion and reduced motion.');
   console.log('Passed: local face recognition, stable multi-frame identity, ambiguity rejection, profile persistence/learning, existing-photo indexing, multiple-face rejection, scores and class isolation.');

@@ -41,7 +41,7 @@ function renderAppearance() {
   $("appearanceSelect").value = appearance;
   if (renderedAppearance === appearance) return;
   renderedAppearance = appearance;
-  if (glass) loadOptionalScript("glass.js?v=20261022-clean", "GlassRenderer").then(() => {
+  if (glass) loadOptionalScript("glass.js?v=20261022-palm-nav", "GlassRenderer").then(() => {
     if (selectedAppearance() === "glass") window.GlassRenderer.start();
   }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
   else window.GlassRenderer?.stop();
@@ -135,9 +135,52 @@ function setControlMode(value) {
   ensureDetectionLoop();
 }
 function answerPrompt() {
-  if (controlMode() === "palms" && stream) return "Raise your left or right open palm to answer instantly.";
+  if (controlMode() === "palms" && stream) return "Show a palm to choose.";
   if (controlMode() === "tilt" && stream) return "Tilt left or right and hold.";
   return compactView() ? "Tap the correct replacement." : "Click an answer or use the left and right arrow keys.";
+}
+// The visible left/right actions are shared by touch and palm input.
+function palmControlContext() {
+  if (document.hidden || isTeacherOpen() || pendingFaceCapture
+    || !$("faceConfirmModal").classList.contains("hidden")
+    || !$("playerLost").classList.contains("hidden")) return null;
+  if (!$("leaderboardOverlay").classList.contains("hidden")) return "leaderboard";
+  if (phase === "round" && !$("roundOverlay").classList.contains("hidden")) return "round";
+  if (phase === "countdown") return "countdown";
+  if (phase === "play" && round && !isPlayBlocked()) return "play";
+  if (phase === "idle" && session?.active) return "idle";
+  if (phase === "lobby" && getCurrentClass()) return "lobby";
+  return null;
+}
+function palmControlTarget(side, context = palmControlContext()) {
+  if (!["left", "right"].includes(side)) return null;
+  let target = null;
+  if (context === "play" && !round?.answered) target = side === "left" ? "optionLeft" : "optionRight";
+  else if (context === "round") target = side === "left" ? "roundLeaderboardBtn" : "nextPlayerBtn";
+  else if (context === "leaderboard" && side === "right") target = "closeLeaderboardBtn";
+  else if (context === "idle") target = side === "left" ? "idleRanksBtn" : "numberedPlayerBtn";
+  else if (context === "lobby" && side === "right") target = "startBtn";
+  return target && !$(target).disabled ? target : null;
+}
+function handlePalmAction(side) {
+  const target = palmControlTarget(side);
+  if (target) $(target).click();
+}
+function palmCue(side) {
+  return `<span class="palm-cue palm-${side}" data-hand="${side === "left" ? "L" : "R"}" role="img" aria-label="${side === "left" ? "Left" : "Right"} palm"></span>`;
+}
+function renderPalmControls() {
+  const live = controlMode() === "palms" && Boolean(stream);
+  document.body.classList.toggle("palm-navigation", live);
+  for (const [id, side] of [["startBtn", "right"], ["idleRanksBtn", "left"], ["numberedPlayerBtn", "right"],
+    ["roundLeaderboardBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"]]) {
+    const button = $(id);
+    button.classList.add("palm-nav");
+    button.setAttribute("data-palm", side);
+    button.setAttribute("aria-label", live ? `${button.textContent}, ${side} palm` : button.textContent);
+  }
+  $("roundAutoHint").classList.toggle("hidden", live || isSolo());
+  $("lbAutoHint").classList.toggle("hidden", live);
 }
 function renderControlMode() {
   const mode = controlMode();
@@ -707,6 +750,7 @@ function hideLeaderboard() {
   hideOverlay("leaderboardOverlay");
   boardContext = null;
   resumeQuestionTimer();
+  syncTracking();
 }
 
 function setCameraUI() {
@@ -718,8 +762,13 @@ function setCameraUI() {
   $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
   $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
   $("calibrateBtn").disabled = !live;
-  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "◀ LEFT HAND" : controlMode() === "tilt" && live ? "◀ TILT LEFT" : compactView() ? "LEFT ANSWER" : "◀ TAP OR PRESS ←";
-  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "RIGHT HAND ▶" : controlMode() === "tilt" && live ? "TILT RIGHT ▶" : compactView() ? "RIGHT ANSWER" : "TAP OR PRESS → ▶";
+  for (const [id, side] of [["optionLeft", "left"], ["optionRight", "right"]]) {
+    const tag = $(id).querySelector(".option-tag");
+    if (controlMode() === "palms") tag.innerHTML = palmCue(side);
+    else tag.textContent = controlMode() === "tilt" && live ? `TILT ${side.toUpperCase()}`
+      : compactView() ? `${side.toUpperCase()} ANSWER` : side === "left" ? "TAP OR PRESS ←" : "TAP OR PRESS →";
+  }
+  renderPalmControls();
   $("camDot").title = live ? "Camera live" : "Camera off";
   document.body.classList.toggle("playing", phase === "play");
   $("cameraNote").textContent = live
@@ -1119,6 +1168,7 @@ async function indexSavedFacePhotos() {
 function closeFaceConfirmation() {
   pendingFaceCapture = null;
   $("faceConfirmModal").classList.add("hidden");
+  syncTracking();
 }
 
 function confirmFacePlayer(studentId) {
@@ -1148,6 +1198,7 @@ function askFaceConfirmation(capture) {
   $("faceConfirmChoices").innerHTML = students.map((student, index) =>
     `<button class="chip-player" type="button" data-face-choice="${student.id}" aria-label="Continue saved player ${index + 1}">${avatarHTML(student)}<b>${student.totalScore || 0} PTS</b></button>`).join("");
   $("faceConfirmModal").classList.remove("hidden");
+  syncTracking();
 }
 
 function portraitCanvas() {
@@ -1186,8 +1237,8 @@ function renderLobby() {
   $("startBtn").textContent = isSolo() ? "START SINGLE PLAYER" : "START CLASS GAME";
   $("manageBtn").textContent = isSolo() ? "GAME SETTINGS" : "SET UP CLASS";
   $("nextPlayerBtn").textContent = isSolo() ? "PLAY AGAIN" : "NEXT PLAYER";
-  $("roundLeaderboardBtn").textContent = isSolo() ? "BACK TO MENU" : "LEADERBOARD";
-  $("roundAutoHint").classList.toggle("hidden", isSolo());
+  $("roundLeaderboardBtn").textContent = isSolo() ? "MENU" : "RANKS";
+  renderPalmControls();
   $("difficultySelect").value = selectedDifficulty();
   $("lobbyDifficulty").value = selectedDifficulty();
   $("drawerTitle").textContent = isSolo() ? "Your game" : "Run the class";
@@ -1465,7 +1516,7 @@ function enterIdle() {
   const summary = lastSummary;
   $("idleSub").textContent = summary
     ? `Last player scored ${summary.gained}/${QUESTIONS_PER_ROUND}. Next player, step up!`
-    : "Tap NEW NUMBERED PLAYER to play straight away, or choose a saved player.";
+    : "Tap NEW PLAYER to play straight away, or choose a saved player.";
   setIdleStatus(stream ? "Look at the camera, then capture your photo" : "New numbered players need no face detection · returning players can tap their card");
   renderIdleRanks();
   $("questionRemaining").textContent = `${unusedQuestionCount()} fresh questions remain for this class · saved across days`;
@@ -1579,7 +1630,7 @@ function beginPlayer(student) {
   lastTrackingAt = 0;
   resetTilt();
   $("countdownHint").textContent = controlMode() === "palms"
-    ? "Left hand = left answer. Right hand = right answer. Raise an open palm to answer instantly."
+    ? "Show a palm to choose. Lower it between choices."
     : controlMode() === "tilt" && stream
     ? "Look straight ahead and hold still to set your centre."
     : "Click an answer or use the left and right arrow keys.";
@@ -2100,11 +2151,13 @@ function showRoundOverlay(result) {
           : "ROUND COMPLETE";
   }
   $("roundOverlay").classList.remove("hidden");
-  if (isSolo()) return;
+  syncTracking();
+  if (isSolo() || controlMode() === "palms" && stream) return;
   $("nextCount").textContent = "9";
   let left = 9;
   const tick = () => {
-    if (phase !== "round" || $("roundOverlay").classList.contains("hidden")) return;
+    if (phase !== "round" || $("roundOverlay").classList.contains("hidden")
+      || controlMode() === "palms" && stream) return;
     left -= 1;
     $("nextCount").textContent = String(Math.max(0, left));
     if (left <= 0) {
@@ -2227,19 +2280,23 @@ function showLeaderboard(options) {
   hideLost();
   $("lbTitle").textContent = final ? "Final class leaderboard" : "Top grammar heroes";
   $("closeLeaderboardBtn").textContent = final || boardContext.after === "lobby" ? "BACK TO CLASS" : "BACK TO GAME";
+  renderPalmControls();
   $("leaderboardList").innerHTML = leaderboardRows();
   animatePodium();
+  syncTracking();
   const cls = getCurrentClass();
   if (cls) {
     cls.leaderboardRanks = Object.fromEntries(rankedPlayers().map((student, index) => [student.id, index + 1]));
     saveDB();
   }
   sfx.board();
+  if (controlMode() === "palms" && stream) return;
   const seconds = final ? 15 : 10;
   let left = seconds;
   $("lbCount").textContent = String(left);
   const tick = () => {
-    if (revision !== boardRevision || $("leaderboardOverlay").classList.contains("hidden")) return;
+    if (revision !== boardRevision || $("leaderboardOverlay").classList.contains("hidden")
+      || controlMode() === "palms" && stream) return;
     left -= 1;
     $("lbCount").textContent = String(Math.max(0, left));
     if (left <= 0) closeLeaderboard();
@@ -2328,6 +2385,7 @@ function bindEvents() {
   ["difficultySelect", "lobbyDifficulty"].forEach(id => $(id).addEventListener("change", () => changeDifficulty($(id).value)));
   $("startBtn").addEventListener("click", startSession);
   $("numberedPlayerBtn").addEventListener("click", startNumberedPlayer);
+  $("idleRanksBtn").addEventListener("click", () => showLeaderboard({ after: "idle" }));
   $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
   $("startSessionBtn").addEventListener("click", startSession);
   $("stopSessionBtn").addEventListener("click", stopSession);
