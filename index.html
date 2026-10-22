@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-replay">
-  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-replay" media="(min-width: 1101px) and (pointer: fine)">
+  <link rel="stylesheet" href="styles.css?v=20261022-face-confirm">
+  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-face-confirm" media="(min-width: 1101px) and (pointer: fine)">
   <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-desktop-lite" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
@@ -377,6 +377,17 @@
       </div>
     </aside>
 
+    <div class="overlay hidden" id="resumeConfirmModal" role="dialog" aria-modal="true" aria-labelledby="resumeConfirmTitle">
+      <div class="round-card resume-confirm-card">
+        <h2 id="resumeConfirmTitle">Play this player?</h2>
+        <div id="resumeConfirmPreview" class="resume-confirm-preview"></div>
+        <div class="round-actions">
+          <button class="btn ghost" id="resumeConfirmNo" type="button">NO</button>
+          <button class="btn primary" id="resumeConfirmYes" type="button">YES</button>
+        </div>
+      </div>
+    </div>
+
     <div class="overlay hidden" id="faceConfirmModal" role="dialog" aria-modal="true" aria-labelledby="faceConfirmTitle">
       <div class="round-card face-confirm-card">
         <h2 id="faceConfirmTitle">Let’s confirm this face</h2>
@@ -395,8 +406,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-replay"></script>
-  <script src="app.js?v=20261022-replay"></script>
+  <script src="palm-control.js?v=20261022-face-confirm"></script>
+  <script src="app.js?v=20261022-face-confirm"></script>
 
 </body>
 </html>

@@ -216,7 +216,12 @@ and runs on fresh video frames with no added wait between inference calls.
 **New player** starts without a portrait or face recognition. Returning
 numbered players tap their numbered card to keep their score. In class mode,
 saved faces are recognised automatically between turns when Camera is on.
-Recognition requires a stable, unambiguous match and resumes the existing score;
+Recognition requires a stable, unambiguous match, then asks **Play this player?**
+with **No / Yes** in both Glass and Lite. Only Yes starts the countdown with the
+existing score. No leaves the class waiting and suppresses another prompt for the
+same face until it leaves the frame; Escape also chooses No. Left palm chooses No,
+right palm chooses Yes, using a fresh gesture after the prompt appears. Recognition
+pauses while awaiting confirmation, and Stop clears any pending decision;
 unknown faces still use Capture & Play. The previous player must leave the frame
 before face resume can select that same player again; **Play again** starts them
 directly. **Settings → Session → Face resume** turns automatic matching off.

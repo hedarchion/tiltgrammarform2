@@ -18,7 +18,7 @@ function element(hidden = false) {
     classList: { add(...names) { names.forEach(n => classes.add(n)); }, remove(...names) { names.forEach(n => classes.delete(n)); },
       contains(n) { return classes.has(n); }, toggle(n, on) { if (on ?? !classes.has(n)) classes.add(n); else classes.delete(n); } },
     appendChild(child) { this.children.push(child); }, querySelector() { return element(); },
-    addEventListener(name, fn) { listeners.set(name, fn); }, click() { if (!this.disabled) listeners.get("click")?.(); }, setAttribute() {}, focus() {}, remove() {}, toDataURL() { return "data:image/jpeg;base64,dGVzdA=="; }, getContext() { return { clearRect() {}, translate() {}, scale() {}, drawImage() {} }; }
+    addEventListener(name, fn) { listeners.set(name, fn); }, click() { if (!this.disabled) listeners.get("click")?.(); }, setAttribute() {}, focus() { context.document.activeElement = this; }, remove() {}, toDataURL() { return "data:image/jpeg;base64,dGVzdA=="; }, getContext() { return { clearRect() {}, translate() {}, scale() {}, drawImage() {} }; }
   };
 }
 const nodes = new Map([...html.matchAll(/<[^>]*\bid="([^"]+)"[^>]*>/g)].map(m => [m[1], element(/class="[^"]*\bhidden\b/.test(m[0]))]));
@@ -455,17 +455,54 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   for (let i=0;i<8;i++) await Promise.resolve();
   assert.equal(run('recognitionReady'), true, 'class entry lazily restores recognition models for saved faces');
   assert.equal(run('faceTrackingNeeded()'), true, 'saved class players enable face resume between turns');
-  for (const at of [1000,1200,1400]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
-  assert.equal(run('phase'), 'countdown', 'stable returning face starts its saved player');
-  assert.equal(run('activeStudentId'), 'returning');
-  assert.equal(run('currentStudents().length'), 1);
-  assert.equal(run('currentStudents()[0].totalScore'), 1700);
+  const observeReturningFace = firstAt => {
+    for (const at of [firstAt,firstAt+200,firstAt+400]) run(`updateFaceIdentity({descriptor:Array(128).fill(.155),detection:{box:{width:200,height:240},score:.95}},${at});`);
+  };
+  for (const style of ['glass','lite']) {
+    run(`applyAppearance("${style}"); enterIdle();`);
+    const beforeDecline = run('JSON.stringify(currentStudents()[0])');
+    const usedBeforePrompt = run('getCurrentClass().usedQuestionIds.length');
+    observeReturningFace(1000);
+    assert.equal(run('phase'), 'idle', `${style}: recognising a face never starts play`);
+    assert.equal(run('pendingFaceResume.studentId'), 'returning');
+    assert.equal(nodes.get('resumeConfirmModal').classList.contains('hidden'), false);
+    assert.equal(run('faceTrackingNeeded()'), false, 'recognition pauses while awaiting a decision');
+    assert.equal(run('getCurrentClass().usedQuestionIds.length'), usedBeforePrompt, 'prompt reserves no questions');
+    assert.equal(context.document.activeElement, nodes.get('resumeConfirmNo'), 'No has default keyboard focus');
+    documentEvents.get('keydown')({key:'Tab',preventDefault(){}});
+    assert.equal(context.document.activeElement, nodes.get('resumeConfirmYes'));
+    documentEvents.get('keydown')({key:'Tab',shiftKey:true,preventDefault(){}});
+    assert.equal(context.document.activeElement, nodes.get('resumeConfirmNo'));
+    nodes.get('resumeConfirmNo').click();
+    assert.equal(run('phase'), 'idle');
+    assert.equal(run('pendingFaceResume'), null);
+    assert.equal(run('JSON.stringify(currentStudents()[0])'), beforeDecline, 'No changes neither the score nor face samples');
+    observeReturningFace(1600);
+    assert.equal(run('pendingFaceResume'), null, 'declined face does not immediately prompt again');
+    run('handleNoFace();');
+    observeReturningFace(2200);
+    assert.ok(run('pendingFaceResume'), 'returning after leaving the frame can prompt again');
+    nodes.get('resumeConfirmYes').click();
+    assert.equal(run('phase'), 'countdown', `${style}: Yes starts the recognised player`);
+    assert.equal(run('activeStudentId'), 'returning');
+    assert.equal(run('currentStudents().length'), 1);
+    assert.equal(run('currentStudents()[0].totalScore'), 1700);
+  }
   run('startRound(currentStudents()[0]); round.results=Array(8).fill("wrong"); finishRound(); nextPlayer();');
   for (const at of [1600,1800,2000]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
   assert.equal(run('phase'), 'idle', 'Next player does not immediately restart the face still in frame');
   run('handleNoFace();');
   for (const at of [2200,2400,2600]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
-  assert.equal(run('phase'), 'countdown', 'a returning player can resume again without a turn limit');
+  assert.equal(run('phase'), 'idle');
+  assert.ok(run('pendingFaceResume'), 'returning player is asked again before another turn');
+  nodes.get('resumeConfirmYes').click();
+  assert.equal(run('phase'), 'countdown', 'confirmed returning player can resume without a turn limit');
+  run('enterIdle(); askFaceResumeConfirmation(currentStudents()[0]);');
+  documentEvents.get('keydown')({key:'Escape',preventDefault(){}});
+  assert.equal(run('pendingFaceResume'), null, 'Escape declines the prompt');
+  assert.equal(run('phase'), 'idle');
+  run('askFaceResumeConfirmation(currentStudents()[0]); session={...session}; confirmFaceResume();');
+  assert.equal(run('phase'), 'idle', 'a stale confirmation cannot start a different session');
   run('enterIdle();');
   nodes.get('faceResumeToggle').click();
   assert.equal(run('DB.settings.faceResume'), false);
@@ -475,8 +512,10 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('stopSession(); changePlayMode("single"); stream={}; startSession();');
   assert.equal(run('faceResumeEnabled()'), false, 'single player never resumes by face');
   assert.equal(run('faceRecognitionRequested()'), false);
+  run('askFaceResumeConfirmation(currentStudents()[0]);');
+  assert.equal(run('pendingFaceResume'), null, 'single player never asks for face confirmation');
   run('stopSession();');
-  console.log('Passed: unlimited class replay, three-turn cadence through replay, automatic class face resume, face-resume toggle and visible Stop across questions/countdowns/results.');
+  console.log('Passed: unlimited class replay, three-turn cadence through replay, class face confirmation in both styles, face-resume toggle and visible Stop across questions/countdowns/results.');
   // Real hand-result routing through the same buttons used by touch input.
   run('stream=null; abortSession(); DB=normalizeDB(null); DB.settings.music=false; DB.settings.sfx=false; createClass("Palm navigation");');
   run(readFileSync('palm-control.js', 'utf8'));
@@ -536,6 +575,24 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('phase'), 'lobby', 'right palm returns solo results to menu');
   gesture('right');
   assert.equal(run('phase'), 'lobby', 'held menu palm cannot restart the game');
+  run('stream=null; changePlayMode("class"); startSession(); stream={}; askFaceResumeConfirmation(currentStudents()[0]);');
+  gesture('right');
+  assert.ok(run('pendingFaceResume'), 'an already-raised palm cannot approve recognition');
+  gesture(null); gesture('left');
+  assert.equal(run('pendingFaceResume'), null, 'fresh left palm selects No');
+  assert.equal(run('phase'), 'idle');
+  gesture('left');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), true, 'No cannot also open ranks');
+  run('askFaceResumeConfirmation(currentStudents()[0]);');
+  gesture('right');
+  assert.ok(run('pendingFaceResume'), 'a new prompt always needs a fresh gesture');
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'countdown', 'fresh right palm selects Yes');
+  run('enterIdle(); askFaceResumeConfirmation(currentStudents()[0]);');
+  nodes.get('stopGameBtn').click();
+  assert.equal(run('pendingFaceResume'), null, 'Stop clears the pending face decision');
+  run('confirmFaceResume();');
+  assert.equal(run('phase'), 'lobby', 'a stale Yes after Stop cannot restart play');
   run('stream=null; syncTracking();');
   assert.equal(run('palmTrackingNeeded()'), false, 'camera-off navigation uses no inference');
   console.log('Passed: instant palm navigation for class start, player entry, results, ranks, solo replay and menu; held/stale gesture, settings and photo-confirmation guards.');

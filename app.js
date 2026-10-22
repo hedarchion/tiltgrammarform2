@@ -41,7 +41,7 @@ function renderAppearance() {
   $("appearanceSelect").value = appearance;
   if (renderedAppearance === appearance) return;
   renderedAppearance = appearance;
-  if (glass) loadOptionalScript("glass.js?v=20261022-replay", "GlassRenderer").then(() => {
+  if (glass) loadOptionalScript("glass.js?v=20261022-face-confirm", "GlassRenderer").then(() => {
     if (selectedAppearance() === "glass") window.GlassRenderer.start();
   }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
   else window.GlassRenderer?.stop();
@@ -144,6 +144,7 @@ function palmControlContext() {
   if (document.hidden || isTeacherOpen() || pendingFaceCapture
     || !$("faceConfirmModal").classList.contains("hidden")
     || !$("playerLost").classList.contains("hidden")) return null;
+  if (pendingFaceResume && !$("resumeConfirmModal").classList.contains("hidden")) return "face-resume";
   if (!$("leaderboardOverlay").classList.contains("hidden")) return "leaderboard";
   if (phase === "round" && !$("roundOverlay").classList.contains("hidden")) return "round";
   if (phase === "countdown") return "countdown";
@@ -155,7 +156,8 @@ function palmControlContext() {
 function palmControlTarget(side, context = palmControlContext()) {
   if (!["left", "right"].includes(side)) return null;
   let target = null;
-  if (context === "play" && !round?.answered) target = side === "left" ? "optionLeft" : "optionRight";
+  if (context === "face-resume") target = side === "left" ? "resumeConfirmNo" : "resumeConfirmYes";
+  else if (context === "play" && !round?.answered) target = side === "left" ? "optionLeft" : "optionRight";
   else if (context === "round") target = side === "left" ? "replayPlayerBtn" : "nextPlayerBtn";
   else if (context === "leaderboard" && side === "right") target = "closeLeaderboardBtn";
   else if (context === "idle") target = side === "left" ? "idleRanksBtn" : "numberedPlayerBtn";
@@ -173,7 +175,7 @@ function renderPalmControls() {
   const live = controlMode() === "palms" && Boolean(stream);
   document.body.classList.toggle("palm-navigation", live);
   for (const [id, side] of [["startBtn", "right"], ["idleRanksBtn", "left"], ["numberedPlayerBtn", "right"],
-    ["replayPlayerBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"]]) {
+    ["replayPlayerBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"], ["resumeConfirmNo", "left"], ["resumeConfirmYes", "right"]]) {
     const button = $(id);
     button.classList.add("palm-nav");
     button.setAttribute("data-palm", side);
@@ -393,6 +395,7 @@ let detectTimer = null;
 let detecting = false;
 let faceIdentity = { samples: [], descriptor: null, match: null, ready: false, at: 0 };
 let pendingFaceCapture = null;
+let pendingFaceResume = null;
 let faceCaptureRequested = false;
 let resumeBlockedStudentId = null;
 const indexingFaces = new Set();
@@ -448,6 +451,7 @@ function isTeacherOpen() {
 function isUiBlocking() {
   return isTeacherOpen()
     || !$("faceConfirmModal").classList.contains("hidden")
+    || !$("resumeConfirmModal").classList.contains("hidden")
     || !$("countdownOverlay").classList.contains("hidden")
     || !$("roundOverlay").classList.contains("hidden")
     || !$("leaderboardOverlay").classList.contains("hidden");
@@ -741,6 +745,7 @@ function hideOverlay(id) {
 }
 
 function hideGameOverlays() {
+  closeFaceResumeConfirmation();
   closeFaceConfirmation();
   hideOverlay("countdownOverlay");
   hideOverlay("roundOverlay");
@@ -862,6 +867,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  closeFaceResumeConfirmation();
   if (typeof stopPalmLoop === "function") stopPalmLoop();
   resetFaceIdentity();
   cameraGeneration += 1;
@@ -1149,14 +1155,53 @@ function updateFaceIdentity(result, now) {
   $("faceMatchStatus").textContent = faceIdentity.match
     ? "Returning face recognised · your saved score is ready"
     : faceIdentity.ready ? "Face ready · we will confirm if the match is uncertain" : "Hold still · checking several frames…";
-  setIdleStatus(faceIdentity.match?.id === resumeBlockedStudentId ? "Next player, step into frame." : faceIdentity.match ? "Recognised · resuming your score"
+  setIdleStatus(faceIdentity.match?.id === resumeBlockedStudentId ? "Next player, step into frame." : faceIdentity.match ? "Recognised · confirm to play"
     : faceIdentity.ready ? "Ready · capture your photo, or tap your saved face" : "Look straight ahead and hold still");
   if (phase === "idle" && faceResumeEnabled() && stream && !isUiBlocking()
     && faceIdentity.match && faceIdentity.match.id !== resumeBlockedStudentId) {
-    const student = faceIdentity.match;
-    faceIdentity.samples.slice(-3).forEach(sample => learnFaceSample(student, sample.descriptor));
-    if (saveDB()) beginPlayer(student);
+    askFaceResumeConfirmation(faceIdentity.match, faceIdentity.samples.slice(-3).map(sample => sample.descriptor));
   }
+}
+
+function askFaceResumeConfirmation(student, descriptors = []) {
+  if (isSolo() || !session?.active || phase !== "idle" || isUiBlocking()
+    || !currentStudents().includes(student)) return;
+  pendingFaceResume = { studentId: student.id, classId: getCurrentClass().id,
+    session, descriptors: descriptors.map(descriptor => descriptor.slice()) };
+  $("resumeConfirmPreview").innerHTML = `${avatarHTML(student)}<b>${(student.totalScore || 0).toLocaleString()} PTS</b>`;
+  $("resumeConfirmModal").classList.remove("hidden");
+  // Confirm with a fresh palm; a hand already raised cannot approve the prompt.
+  if (typeof resetPalm === "function") resetPalm();
+  renderPalmControls();
+  syncTracking();
+  $("resumeConfirmNo").focus();
+}
+function closeFaceResumeConfirmation() {
+  pendingFaceResume = null;
+  $("resumeConfirmModal").classList.add("hidden");
+  $("resumeConfirmPreview").innerHTML = "";
+}
+function declineFaceResume() {
+  if (!pendingFaceResume) return;
+  resumeBlockedStudentId = pendingFaceResume.studentId;
+  closeFaceResumeConfirmation();
+  resetFaceIdentity();
+  if (typeof resetPalm === "function") resetPalm();
+  syncTracking();
+  if (!isTeacherOpen()) $("numberedPlayerBtn").focus();
+}
+function confirmFaceResume() {
+  const pending = pendingFaceResume;
+  if (!pending) return;
+  const student = studentById(pending.studentId);
+  const valid = !isSolo() && !isTeacherOpen() && !pendingFaceCapture && phase === "idle" && session?.active
+    && session === pending.session && getCurrentClass()?.id === pending.classId && student;
+  closeFaceResumeConfirmation();
+  if (!valid) { syncTracking(); return; }
+  pending.descriptors.forEach(descriptor => learnFaceSample(student, descriptor));
+  if (!saveDB()) { resumeBlockedStudentId = student.id; resetFaceIdentity(); syncTracking(); return; }
+  beginPlayer(student);
+  $("stopGameBtn").focus();
 }
 
 function learnFaceSample(student, descriptor) {
@@ -2277,6 +2322,11 @@ function animatePodium() {
 
 function showLeaderboard(options) {
   if (isSolo()) return;
+  if (pendingFaceResume) {
+    resumeBlockedStudentId = pendingFaceResume.studentId;
+    closeFaceResumeConfirmation();
+    resetFaceIdentity();
+  }
   pauseQuestionTimer();
   const revision = ++boardRevision;
   const config = options || {};
@@ -2366,9 +2416,21 @@ function bindEvents() {
   document.addEventListener("pointerdown", ensureAudio, { capture: true });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (pendingFaceCapture) closeFaceConfirmation();
+      if (isTeacherOpen()) closeTeacherPanel();
+      else if (pendingFaceResume) { event.preventDefault(); declineFaceResume(); }
+      else if (pendingFaceCapture) closeFaceConfirmation();
       else if (!document.querySelector("#leaderboardOverlay").classList.contains("hidden")) closeLeaderboard();
-      else if (isTeacherOpen()) closeTeacherPanel();
+      return;
+    }
+    if (pendingFaceResume && !isTeacherOpen()) {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const controls = [$("resumeConfirmNo"), $("resumeConfirmYes")];
+        const current = controls.indexOf(document.activeElement);
+        const next = current < 0 ? (event.shiftKey ? controls.length - 1 : 0)
+          : (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        controls[next].focus();
+      }
       return;
     }
     if (event.repeat || event.target.closest("input, textarea, select, [contenteditable]")) return;
@@ -2411,6 +2473,7 @@ function bindEvents() {
   $("roundStopBtn").addEventListener("click", stopSession);
   $("faceResumeToggle").addEventListener("click", () => {
     DB.settings.faceResume = !DB.settings.faceResume;
+    if (!DB.settings.faceResume) declineFaceResume();
     saveDB();
     resetFaceIdentity();
     renderSettings();
@@ -2473,6 +2536,8 @@ function bindEvents() {
     const student = studentById(button.dataset.studentId);
     if (student && phase === "idle") startTurn(student);
   });
+  $("resumeConfirmNo").addEventListener("click", declineFaceResume);
+  $("resumeConfirmYes").addEventListener("click", confirmFaceResume);
   $("faceConfirmCancel").addEventListener("click", closeFaceConfirmation);
   $("faceConfirmNew").addEventListener("click", () => confirmFacePlayer(null));
   $("faceConfirmChoices").addEventListener("click", event => {

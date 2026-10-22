@@ -1260,3 +1260,9 @@ body.in-session #leaderboardBtn, body.in-session #fullscreenBtn { display: none;
   body.in-session .overlay { padding-top: calc(80px + env(safe-area-inset-top)); padding-bottom: 12px; }
   body.in-session .round-card { max-height: calc(100dvh - 92px - env(safe-area-inset-top)); }
 }
+
+body .resume-confirm-card { width:min(400px,100%); max-width:400px; }
+.resume-confirm-card h2 { margin:0; font:900 clamp(21px,3vw,28px) var(--body); }
+.resume-confirm-preview { display:flex; flex-direction:column; align-items:center; gap:12px; margin:24px 0; }
+.resume-confirm-preview .avatar { width:88px; height:88px; border-radius:50%; font-size:24px; }
+.resume-confirm-preview b { color:var(--mint); font:900 16px var(--body); }
