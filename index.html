@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-mobile">
-  <link rel="stylesheet" href="glass.css?v=20261022-mobile">
-  <link rel="stylesheet" href="mobile.css?v=20261022-mobile">
+  <link rel="stylesheet" href="styles.css?v=20261022-appearance">
+  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-appearance">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-appearance" media="not all">
 </head>
 <body>
   <div class="app" id="app">
@@ -70,6 +70,13 @@
         <div class="game-modes" role="group" aria-label="Game mode">
           <button class="mode-choice" id="classModeBtn" type="button" aria-pressed="true"><b>CLASS MODE</b><span>Take turns. Climb the class ranks.</span></button>
           <button class="mode-choice" id="singleModeBtn" type="button" aria-pressed="false"><b>SINGLE PLAYER</b><span>Practise on your own. Beat your score.</span></button>
+        </div>
+        <div class="appearance-picker" role="group" aria-label="UI style">
+          <div class="appearance-copy"><div class="panel-label">UI STYLE</div><p class="small-note" id="appearanceHint">Glass effects may use more power. Lite is easier on phones and tablets.</p></div>
+          <div class="appearance-options">
+            <button class="appearance-choice" id="glassAppearanceBtn" type="button" aria-pressed="true">Glass</button>
+            <button class="appearance-choice" id="liteAppearanceBtn" type="button" aria-pressed="false">Lite</button>
+          </div>
         </div>
         <div class="lobby-grid">
           <div class="panel lobby-main">
@@ -282,6 +289,14 @@
           <div class="teacher-roster" id="teacherRoster"></div>
         </details>
 
+        <details class="drawer-section settings-group" open><summary>UI STYLE</summary>
+          <label class="panel-label" for="appearanceSelect">APPEARANCE</label>
+          <select class="select" id="appearanceSelect" aria-describedby="appearancePowerNote">
+            <option value="glass">Glass · Classroom arcade</option>
+            <option value="lite">Lite · Individual practice</option>
+          </select>
+          <p class="drawer-hint" id="appearancePowerNote">Glass effects may use more power. Choose Lite for a lighter phone or tablet experience.</p>
+        </details>
         <details class="drawer-section settings-group" open><summary>GAME SETTINGS</summary>
             <label for="formSelect" class="panel-label">GRAMMAR LEVEL</label>
             <select class="select" id="formSelect">
@@ -390,8 +405,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-mobile"></script>
-  <script src="app.js?v=20261022-mobile"></script>
+  <script src="palm-control.js?v=20261022-appearance"></script>
+  <script src="app.js?v=20261022-appearance"></script>
 
 </body>
 </html>

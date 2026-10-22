@@ -1,19 +1,5 @@
-/* Shared setup controls; the classroom view keeps its generous scale. */
-.lobby-setup { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-block:18px; }
-.setup-field { display:grid; gap:7px; min-width:0; }
-.lobby-setup > .small-note { grid-column:1/-1; margin:0; }
-.rules-details { width:100%; }
-.rules-details summary { cursor:pointer; font-weight:900; padding-block:8px; }
-.rules-details .rules-list { margin-block:12px; }
-.mobile-round-score { display:none; }
-.settings-group > summary { cursor:pointer; list-style-position:inside; font-weight:900; color:var(--mint); font-size:14px; padding-block:5px; }
-.settings-group[open] > summary { margin-bottom:12px; }
-.drawer { position:fixed; visibility:hidden; }
-body.teacher-open .drawer { visibility:visible; }
-body.teacher-open { overflow:hidden; }
-
 /* Phone and tablet: a quiet canvas, one question and two generous answer targets. */
-@media (max-width:1100px), (pointer:coarse) {
+@media all {
   :root {
     --mobile-surface:#132a35;
     --mobile-background:#0c1e27;

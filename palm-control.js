@@ -81,7 +81,7 @@ async function ensurePalmLoop() {
     if(!palmLoading) {
       palmStatus('Loading hand tracking…');
       palmLoading=(async()=>{
-        await loadTrackingScript("vendor/hands/hands.js", "Hands");
+        await loadOptionalScript("vendor/hands/hands.js", "Hands");
         const engine=new Hands({locateFile:file=>`vendor/hands/${file}`});
         engine.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.65,minTrackingConfidence:.65,selfieMode:false});
         engine.onResults(handlePalmResults);

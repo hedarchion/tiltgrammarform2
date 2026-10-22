@@ -1127,3 +1127,47 @@ body.teacher-open .drawer { transform: none; }
   .stage { overflow-y: auto; }
   .lobby { height: max-content; flex-shrink: 0; margin-block: auto; }
 }
+
+/* Shared setup controls; the classroom view keeps its generous scale. */
+.lobby-setup { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-block:18px; }
+.setup-field { display:grid; gap:7px; min-width:0; }
+.lobby-setup > .small-note { grid-column:1/-1; margin:0; }
+.rules-details { width:100%; }
+.rules-details summary { cursor:pointer; font-weight:900; padding-block:8px; }
+.rules-details .rules-list { margin-block:12px; }
+.mobile-round-score { display:none; }
+.settings-group > summary { cursor:pointer; list-style-position:inside; font-weight:900; color:var(--mint); font-size:14px; padding-block:5px; }
+.settings-group[open] > summary { margin-bottom:12px; }
+.drawer { position:fixed; visibility:hidden; }
+body.teacher-open .drawer { visibility:visible; }
+body.teacher-open { overflow:hidden; }
+
+
+/* Appearance is independent of game rules and input controls. */
+.appearance-picker { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.appearance-copy { min-width:0; }
+.appearance-copy .small-note { margin:5px 0 0; max-width:64ch; }
+.appearance-options { display:flex; flex-shrink:0; padding:4px; border:1px solid var(--line); border-radius:14px; background:rgba(5,15,27,.5); gap:4px; }
+.appearance-choice { min-width:76px; min-height:44px; padding:10px 14px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--muted); font:900 13px var(--body); }
+.appearance-choice[aria-pressed="true"] { background:#284f43; color:#caffdf; border-color:#78baa0; }
+.appearance-choice:active { transform:scale(.97); }
+body.theme-lite .appearance-options { background:#10242e; border-color:#304954; }
+body.theme-lite .appearance-picker .panel-label { font:800 11px var(--body); letter-spacing:.08em; }
+body.theme-glass .logo-wrap .tagline { max-width:none; }
+@media(max-width:600px) {
+  .appearance-picker { gap:10px; align-items:flex-start; }
+  .appearance-choice { min-width:56px; padding-inline:10px; }
+  .appearance-copy .small-note { font-size:11px; line-height:1.4; }
+}
+
+@media(max-width:760px) {
+  body.theme-glass .app { overflow:hidden; }
+  body.theme-glass .camera-layer { position:fixed; overflow:hidden; }
+  body.theme-glass .logo { font-size:clamp(26px,6.8vw,42px); }
+  body.theme-glass .hud-btn { min-height:44px; }
+}
+@media(max-width:374px) {
+  body.theme-glass .face-card .face-avatar { display:none; }
+  body.theme-glass .hud-name { max-width:76px; font-size:12px; }
+  body.theme-glass .face-card { padding-inline:6px; }
+}

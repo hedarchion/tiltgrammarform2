@@ -34,19 +34,38 @@ shared across difficulty settings within each class or personal profile, so chan
 difficulty never makes a used question fresh. A smaller pool can run out sooner;
 select another difficulty or form to use its remaining questions.
 
+## Choose Glass or Lite
+
+One app includes two UI styles. Choose **Glass / Lite** on the home screen, or
+**Settings → UI style** during a round. Class mode defaults to the previous Glass
+classroom arcade; single player defaults to Lite for individual practice. Each mode
+remembers its own UI choice on this device, independently of grammar and difficulty.
+Switching styles preserves the active question, camera controls, scores and history.
+
+**Glass** restores the translucent panels, optical refraction and camera backdrop.
+The UI notes that glass effects may use more power. Its renderer loads only when
+Glass is selected; static scenes redraw on changes, and live camera refraction is
+capped at 24 fps. Selecting Lite cancels rendering callbacks, removes the optical
+canvases, disconnects its observers and releases its GPU context. Browsers without
+WebGL and reduced-transparency preferences retain a CSS glass fallback.
+
+**Lite** keeps the high-contrast phone/tablet design, including on larger screens,
+with simpler surfaces, restrained effects and no decorative renderer. Both styles
+use the same immediate left/right palm selection and optional camera controls.
+
 ## Phone and tablet layout
 
-Phones and tablets use a solid, high-contrast interface with a compact header,
+Lite uses a solid, high-contrast interface with a compact header,
 44-pixel minimum header controls, large answer cards, and readable question text.
 Grammar level and difficulty are available directly on the home screen. Answers
 stay side by side; landscape phones place the question beside them. The camera
 preview is a small status strip, hidden on short phones to keep answers visible.
 Results and settings scroll within the screen, respect safe areas, and use native
-expandable settings groups. Large classroom displays retain the glass CSS styling.
+expandable settings groups. Glass remains available at any screen size.
 
 ## Less background work
 
-- No decorative WebGL renderer, canvas refraction, or permanent app animation loop.
+- Lite has no decorative WebGL renderer, canvas refraction or permanent app animation loop. Glass is an explicit higher-power visual option.
 - No tracking-library or model downloads on startup or during ordinary button play.
 - Palm mode loads only the hand engine. Head tilt loads the detector and landmarks;
   face recognition loads separately when **Capture & Play** requests it.
@@ -56,7 +75,7 @@ expandable settings groups. Large classroom displays retain the glass CSS stylin
 - Camera capture requests 640×360 at up to 30 fps, rather than 1280×720. Palm
   classification still runs on fresh camera frames without a confirmation timer;
   only preview painting is capped at 12 fps. Hidden previews are not painted.
-- Compact displays skip full-screen camera compositing, backdrop blur, screen
+- Lite skips full-screen camera compositing, backdrop blur, screen
   flashes, callout effects and confetti particles.
 
 These changes remove work; device-specific battery life and tracking latency have
@@ -110,7 +129,7 @@ on the HUD, countdown, results, player picker and leaderboard.
 ## Hosting and local data
 
 Serve this folder as a static site. Keep `index.html`, `app.js`, `questions.js`,
-`styles.css`, `glass.css`, `mobile.css`, `vendor/face-api.min.js` and all tiny detector,
+`styles.css`, `glass.css`, `mobile.css`, `glass.js`, `vendor/face-api.min.js` and all tiny detector,
 68-point landmark and recognition model files under `models/`. Include
 `palm-control.js` and the complete `vendor/hands/` directory for palm controls. Published camera access requires HTTPS; localhost supports development.
 
@@ -126,6 +145,7 @@ Local server: `python3 -m http.server 8766`.
 
 Checks:
 
+- `node tests/glass-renderer.test.cjs`
 - `node tests/tilt.test.cjs`
 - `node tests/player-flow.test.cjs`
 - `node tests/question-bank.test.cjs`

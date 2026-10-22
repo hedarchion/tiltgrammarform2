@@ -1,21 +1,53 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-// Small/touch displays use CSS surfaces and compact effects, without a render loop.
-function compactView() { return Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
-function quietEffects() { return compactView() || Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
-const trackingScripts = new Map();
-function loadTrackingScript(src, globalName) {
+// Layout and effects follow the selected UI; input and scoring stay independent.
+function compactView() { return selectedAppearance() === "lite" || Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
+function quietEffects() { return selectedAppearance() === "lite" || Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
+let renderedAppearance = null;
+function selectedAppearance() { return DB.settings[isSolo() ? "soloAppearance" : "classAppearance"] || (isSolo() ? "lite" : "glass"); }
+function setAppearance(value) {
+  if (!["glass", "lite"].includes(value)) return;
+  const key = isSolo() ? "soloAppearance" : "classAppearance", previous = DB.settings[key];
+  DB.settings[key] = value;
+  if (!saveDB()) DB.settings[key] = previous;
+  renderAppearance();
+  setCameraUI();
+}
+function renderAppearance() {
+  const appearance = selectedAppearance(), glass = appearance === "glass";
+  $("glassThemeStyles").disabled = !glass;
+  $("glassThemeStyles").media = glass ? "all" : "not all";
+  $("liteThemeStyles").disabled = glass;
+  $("liteThemeStyles").media = glass ? "not all" : "all";
+  document.body.classList.toggle("theme-glass", glass);
+  document.body.classList.toggle("theme-lite", !glass);
+  $("glassAppearanceBtn").setAttribute("aria-pressed", String(glass));
+  $("liteAppearanceBtn").setAttribute("aria-pressed", String(!glass));
+  $("appearanceSelect").value = appearance;
+  const note = glass ? "Glass effects may use more power. Choose Lite for phones and tablets."
+    : "Lite uses simpler visuals to save power. Instant palm answers work in both styles.";
+  $("appearanceHint").textContent = note;
+  $("appearancePowerNote").textContent = note;
+  if (renderedAppearance === appearance) return;
+  renderedAppearance = appearance;
+  if (glass) loadOptionalScript("glass.js?v=20261022-appearance", "GlassRenderer").then(() => {
+    if (selectedAppearance() === "glass") window.GlassRenderer.start();
+  }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
+  else window.GlassRenderer?.stop();
+}
+const optionalScripts = new Map();
+function loadOptionalScript(src, globalName) {
   if (window[globalName]) return Promise.resolve();
-  if (trackingScripts.has(src)) return trackingScripts.get(src);
+  if (optionalScripts.has(src)) return optionalScripts.get(src);
   const promise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = src;
     script.onload = resolve;
-    script.onerror = () => { script.remove(); trackingScripts.delete(src); reject(new Error(`Could not load ${src}`)); };
+    script.onerror = () => { script.remove(); optionalScripts.delete(src); reject(new Error(`Could not load ${src}`)); };
     document.head.appendChild(script);
   });
-  trackingScripts.set(src, promise);
+  optionalScripts.set(src, promise);
   return promise;
 }
 const STORAGE_KEY = "grammartilt_v2";
@@ -185,6 +217,8 @@ function compareStudents(a, b) {
 }
 
 const defaultSettings = {
+  classAppearance: "glass",
+  soloAppearance: "lite",
   controlMode: "palms",
   sfx: true,
   music: true,
@@ -238,6 +272,8 @@ function normalizeDB(raw) {
   };
   if (!raw || typeof raw !== "object") return db;
   if (raw.settings && typeof raw.settings === "object") {
+    db.settings.classAppearance = ["glass", "lite"].includes(raw.settings.classAppearance) ? raw.settings.classAppearance : "glass";
+    db.settings.soloAppearance = ["glass", "lite"].includes(raw.settings.soloAppearance) ? raw.settings.soloAppearance : "lite";
     db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
     db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
     db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
@@ -706,7 +742,7 @@ async function loadModels(force) {
   modelsReady = false;
   setModelStatus();
   try {
-    await loadTrackingScript("vendor/face-api.min.js", "faceapi");
+    await loadOptionalScript("vendor/face-api.min.js", "faceapi");
     await Promise.all([
       ...(headsReady ? [] : [faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)]),
@@ -1238,6 +1274,7 @@ function renderTeacherMeta() {
 }
 
 function renderSettings() {
+  $("appearanceSelect").value = selectedAppearance();
   $("tiltSensitivity").value = String(DB.settings.tiltThreshold);
   $("tiltHold").value = String(DB.settings.tiltHoldMs);
   $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
@@ -1247,6 +1284,7 @@ function renderSettings() {
 }
 
 function refreshAll() {
+  renderAppearance();
   renderClassSelect();
   renderLobby();
   renderIdleRanks();
@@ -2278,6 +2316,9 @@ function bindEvents() {
     });
   });
 
+  $("glassAppearanceBtn").addEventListener("click", () => setAppearance("glass"));
+  $("liteAppearanceBtn").addEventListener("click", () => setAppearance("lite"));
+  $("appearanceSelect").addEventListener("change", () => setAppearance($("appearanceSelect").value));
   $("classModeBtn").addEventListener("click", () => changePlayMode("class"));
   $("singleModeBtn").addEventListener("click", () => changePlayMode("single"));
   ["difficultySelect", "lobbyDifficulty"].forEach(id => $(id).addEventListener("change", () => changeDifficulty($(id).value)));

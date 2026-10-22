@@ -34,7 +34,7 @@ const faceapi = { nets: {
   faceRecognitionNet: { async loadFromUri() { modelLoads.push('recognition'); } }
 } };
 const context = vm.createContext({
-  console, performance: { now: () => 1000 }, window: { faceapi }, faceapi,
+  console, performance: { now: () => 1000 }, window: { faceapi, GlassRenderer: { start() {}, stop() {} } }, faceapi,
   navigator: { mediaDevices: { getUserMedia() { cameraCalls++; throw new Error('Camera must stay optional'); } } },
   localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) },
   setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 2; }, clearInterval() {}, requestAnimationFrame() { animationRequests++; },
@@ -52,7 +52,7 @@ assert.equal(run('QUESTION_BANK.length'), 1000);
 assert.deepEqual(modelLoads, [], 'home screen never loads face models');
 assert.equal(animationRequests, 0, 'home screen has no app animation loop');
 assert.ok(!html.includes('src="vendor/'), 'tracking libraries are loaded on demand');
-assert.ok(!html.includes('src="glass.js'), 'decorative WebGL renderer is not shipped');
+assert.ok(!html.includes('src="glass.js'), 'decorative WebGL renderer is not loaded eagerly');
 assert.equal(run('new Set(QUESTION_BANK.map(q => q.topic)).size'), 20);
 const migrated = JSON.parse(storage.get('grammartilt_v2'));
 assert.equal(migrated.classes.old.students[0].totalScore, 400);
@@ -328,6 +328,31 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   console.log('Passed: direct solo start, replay, persistent personal progress, class isolation, mode/difficulty locks and solo menu flow.');
   await Promise.resolve();
   assert.deepEqual(modelLoads, ['detector', 'landmarks', 'recognition']);
+  // Both visual styles use the same profiles, question history and active round.
+  assert.equal(run('normalizeDB(null).settings.classAppearance'), 'glass', 'class defaults to previous glass UI');
+  assert.equal(run('normalizeDB(null).settings.soloAppearance'), 'lite', 'individual play defaults to lighter UI');
+  const classesBeforeTheme = run('JSON.stringify(DB.classes)');
+  run('setAppearance("lite"); changePlayMode("single");');
+  assert.equal(run('selectedAppearance()'), 'lite');
+  run('setAppearance("glass"); startSession(); startRound(currentStudents()[0]);');
+  const activeQuestions = run('round.qs.map(q=>q.id).join(",")');
+  const activePlayer = run('round.student.id');
+  run('setAppearance("lite");');
+  assert.equal(run('phase'), 'play', 'UI can change mid-round');
+  assert.equal(run('round.student.id'), activePlayer);
+  assert.equal(run('round.qs.map(q=>q.id).join(",")'), activeQuestions);
+  assert.equal(nodes.get('liteThemeStyles').disabled, false);
+  assert.equal(nodes.get('glassThemeStyles').disabled, true);
+  run('setAppearance("glass"); stopSession(); changePlayMode("class");');
+  assert.equal(run('selectedAppearance()'), 'lite', 'class retains its independent choice');
+  assert.equal(run('JSON.stringify(DB.classes)'), classesBeforeTheme, 'appearance leaves class records untouched');
+  run('DB=loadDB(); changePlayMode("single");');
+  assert.equal(run('selectedAppearance()'), 'glass', 'solo preference survives reload');
+  run('changePlayMode("class"); setAppearance("glass");');
+  assert.equal(nodes.get('liteThemeStyles').disabled, true);
+  assert.equal(nodes.get('glassThemeStyles').disabled, false);
+  assert.match(nodes.get('appearancePowerNote').textContent, /more power/);
+  console.log('Passed: Glass/Lite defaults, per-mode preferences, persistence, live switching and shared game data.');
   // Head tilt needs two small models; recognition is a separate, later request.
   run('stream=null; modelsReady=false; recognitionReady=false; faceCaptureRequested=false;');
   await run('loadModels(false);');

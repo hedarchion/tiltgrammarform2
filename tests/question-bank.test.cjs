@@ -13,7 +13,7 @@ seededMath.random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 3
 const saved = new Map();
 let storageFails = false;
 const context = vm.createContext({
-  console: {...console, warn() {}}, Math: seededMath, window: {}, performance: { now: () => 1000 },
+  console: {...console, warn() {}}, Math: seededMath, window: {GlassRenderer:{start(){},stop(){}}}, performance: { now: () => 1000 },
   localStorage: { getItem(key) { return saved.get(key); }, setItem(key, value) { if (storageFails) throw new Error("Storage unavailable"); saved.set(key, value); } },
   setTimeout() { return 1; }, clearTimeout() {},
   document: { hidden: false, body: element(),
@@ -199,3 +199,13 @@ assert.equal(run('selectedDifficulty()'), 'challenge', 'failed difficulty save r
 assert.equal(run('isSolo()'), false, 'failed mode save rolls back');
 storageFails = false;
 console.log('Passed: all six form/difficulty pools, constrained selection, shared nonrepeat history, persistence, validation and save rollback.');
+
+run('session=null; changePlayMode("class"); setAppearance("glass");');
+storageFails=true;
+run('setAppearance("lite");');
+assert.equal(run('selectedAppearance()'),'glass','failed appearance save rolls back');
+assert.equal(elements.get('liteThemeStyles').disabled,true,'rollback retains Glass CSS');
+storageFails=false;
+run('setAppearance("unknown");');
+assert.equal(run('selectedAppearance()'),'glass','invalid appearance ignored');
+console.log('Passed: UI preference validation and failed-save rollback.');
