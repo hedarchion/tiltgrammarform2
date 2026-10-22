@@ -34,6 +34,39 @@ shared across difficulty settings within each class or personal profile, so chan
 difficulty never makes a used question fresh. A smaller pool can run out sooner;
 select another difficulty or form to use its remaining questions.
 
+## Phone and tablet layout
+
+Phones and tablets use a solid, high-contrast interface with a compact header,
+44-pixel minimum header controls, large answer cards, and readable question text.
+Grammar level and difficulty are available directly on the home screen. Answers
+stay side by side; landscape phones place the question beside them. The camera
+preview is a small status strip, hidden on short phones to keep answers visible.
+Results and settings scroll within the screen, respect safe areas, and use native
+expandable settings groups. Large classroom displays retain the glass CSS styling.
+
+## Less background work
+
+- No decorative WebGL renderer, canvas refraction, or permanent app animation loop.
+- No tracking-library or model downloads on startup or during ordinary button play.
+- Palm mode loads only the hand engine. Head tilt loads the detector and landmarks;
+  face recognition loads separately when **Capture & Play** requests it.
+- Idle numbered-player screens do not run face recognition. Settings and hidden
+  tabs stop tracking callbacks. Answer feedback stops palm inference once the hand
+  has been lowered/closed, and the next question resumes it immediately.
+- Camera capture requests 640×360 at up to 30 fps, rather than 1280×720. Palm
+  classification still runs on fresh camera frames without a confirmation timer;
+  only preview painting is capped at 12 fps. Hidden previews are not painted.
+- Compact displays skip full-screen camera compositing, backdrop blur, screen
+  flashes, callout effects and confetti particles.
+
+These changes remove work; device-specific battery life and tracking latency have
+not been measured on physical phones. To inspect layouts locally, open
+`tests/mobile-preview.html` on a separate localhost port so its fixture does not
+mix demo scores into normal browser records. It supports small phone, phone,
+landscape phone, portrait/landscape tablet and classroom viewport sizes, plus
+home, play, long-question, camera-layout, result, settings, class and ranks scenes.
+The camera-layout fixture is simulated and never requests camera access.
+
 ## Continue across days
 
 Choose the same class tomorrow. Photos, confirmed face samples, completed-round
@@ -51,10 +84,11 @@ Question source: `scripts/build-questions.cjs`, with five curated constructions 
 topic and ten matched contexts for each construction. Rebuild with
 `node scripts/build-questions.cjs`.
 
-## Face-first classroom flow
+## Optional photo players
 
 1. Create or select a class and start the game. No names or separate enrollment.
-2. Enable the camera with just one player in frame. Recognition uses several
+2. Tap **Capture & Play** to enable photo recognition, with just one player in frame.
+   The face engine loads on this first request. Recognition uses several
    clear frames and checks that the best match is sufficiently distinct from
    the next candidate. A recognised returning portrait and its score appear
    before the player taps **Continue My Score**.
@@ -76,7 +110,7 @@ on the HUD, countdown, results, player picker and leaderboard.
 ## Hosting and local data
 
 Serve this folder as a static site. Keep `index.html`, `app.js`, `questions.js`,
-`styles.css`, `glass.css`, `glass.js`, `vendor/face-api.min.js` and all tiny detector,
+`styles.css`, `glass.css`, `mobile.css`, `vendor/face-api.min.js` and all tiny detector,
 68-point landmark and recognition model files under `models/`. Include
 `palm-control.js` and the complete `vendor/hands/` directory for palm controls. Published camera access requires HTTPS; localhost supports development.
 

@@ -47,17 +47,33 @@ const PalmInput = (() => {
 
 let palmEngine=null, palmLoading=null, palmTimer=null, palmBusy=false, palmFailed=false;
 let palmState=PalmInput.createState();
-let palmGeneration=0, palmRequestGeneration=-1;
+let palmGeneration=0, palmRequestGeneration=-1, lastPalmPreviewAt=-Infinity;
 function palmStatus(text) { const el=$("palmStatus"); if(el.textContent!==text) el.textContent=text; }
 function resetPalm() { palmState=PalmInput.createState(true); if(typeof clearCharge==='function') clearCharge(); }
-function stopPalmLoop() {
-  palmGeneration+=1;
+function cancelPalmTick() {
   if(palmTimer?.kind==='video') $('camera').cancelVideoFrameCallback(palmTimer.id);
   else if(palmTimer) clearTimeout(palmTimer.id);
   palmTimer=null;
+}
+function palmTrackingNeeded() {
+  if(!stream || controlMode()!=='palms' || document.hidden || !["play","countdown"].includes(phase)) return false;
+  if(typeof isTeacherOpen==='function' && isTeacherOpen()) return false;
+  if(phase==='play' && isPlayBlocked()) return false;
+  return phase!=='play' || !round?.answered || palmState.latched;
+}
+function syncPalmLoop() {
+  if(palmTrackingNeeded()) ensurePalmLoop();
+  else {
+    palmGeneration+=1; cancelPalmTick();
+    if(document.hidden || typeof isTeacherOpen==='function' && isTeacherOpen() || isPlayBlocked()) resetPalm();
+  }
+}
+function stopPalmLoop() {
+  palmGeneration+=1;
+  cancelPalmTick();
   resetPalm();
   const canvas=$("palmPreview"); canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-  palmStatus('Camera off · use ENABLE CAMERA above, or tap an answer');
+  palmStatus('Camera off · tap Camera for palm controls');
 }
 async function ensurePalmLoop() {
   if(!stream || controlMode()!=='palms' || palmFailed) return;
@@ -65,6 +81,7 @@ async function ensurePalmLoop() {
     if(!palmLoading) {
       palmStatus('Loading hand tracking…');
       palmLoading=(async()=>{
+        await loadTrackingScript("vendor/hands/hands.js", "Hands");
         const engine=new Hands({locateFile:file=>`vendor/hands/${file}`});
         engine.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:.65,minTrackingConfidence:.65,selfieMode:false});
         engine.onResults(handlePalmResults);
@@ -80,7 +97,7 @@ async function ensurePalmLoop() {
   if(palmEngine) schedulePalmTick();
 }
 function schedulePalmTick(delay = 0) {
-  if(palmTimer || palmBusy || !stream || controlMode()!=='palms' || palmFailed) return;
+  if(palmTimer || palmBusy || !palmTrackingNeeded() || palmFailed) return;
   const video=$('camera');
   // Process each fresh camera frame as soon as it is available, one at a time.
   if(!delay && video.requestVideoFrameCallback) {
@@ -89,8 +106,8 @@ function schedulePalmTick(delay = 0) {
 }
 async function palmTick() {
   palmTimer=null;
-  if(!stream || controlMode()!=='palms' || palmBusy) return;
-  if(document.hidden || !["play","countdown"].includes(phase)) {resetPalm();schedulePalmTick(250);return;}
+  if(!palmTrackingNeeded() || palmBusy) return;
+  updatePalmFeedback(performance.now());
   palmBusy=true;
   palmRequestGeneration=palmGeneration;
   try {
@@ -110,14 +127,19 @@ function updatePalmFeedback(now) {
   }
 }
 function handlePalmResults(results) {
-  if(!stream || controlMode()!=='palms' || document.hidden || palmRequestGeneration!==palmGeneration) return;
+  if(!palmTrackingNeeded() || palmRequestGeneration!==palmGeneration) return;
   const hands=results.multiHandLandmarks||[];
   const aspect=$("camera").videoWidth/$("camera").videoHeight || 16/9;
   const result=PalmInput.step(palmState,hands,results.multiHandedness||[],performance.now(),phase==='play' && !!round && !round.answered && !isPlayBlocked(),aspect);
   palmStatus(result.status);
-  setCharge(result.side,result.ratio);
   if(result.answer) answer(result.answer);
-  const canvas=$("palmPreview"),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+  // Classification stays at full camera speed; only the small preview is capped.
+  const now=performance.now();
+  if(!result.answer && now-lastPalmPreviewAt<1000/12) return;
+  lastPalmPreviewAt=now;
+  const canvas=$("palmPreview");
+  if(canvas.offsetParent===null) return;
+  const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
   ctx.clearRect(0,0,w,h);ctx.save();ctx.translate(w,0);ctx.scale(-1,1);
   ctx.drawImage(results.image,0,0,w,h);ctx.restore();
   ctx.fillStyle='rgba(5,12,30,.3)';ctx.fillRect(0,0,w,h);

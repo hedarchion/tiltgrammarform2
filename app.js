@@ -1,6 +1,23 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+// Small/touch displays use CSS surfaces and compact effects, without a render loop.
+function compactView() { return Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
+function quietEffects() { return compactView() || Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
+const trackingScripts = new Map();
+function loadTrackingScript(src, globalName) {
+  if (window[globalName]) return Promise.resolve();
+  if (trackingScripts.has(src)) return trackingScripts.get(src);
+  const promise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => { script.remove(); trackingScripts.delete(src); reject(new Error(`Could not load ${src}`)); };
+    document.head.appendChild(script);
+  });
+  trackingScripts.set(src, promise);
+  return promise;
+}
 const STORAGE_KEY = "grammartilt_v2";
 const MODEL_URL = "models";
 const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
@@ -24,6 +41,14 @@ const DIFFICULTY_TOPICS = {
 function selectedDifficulty(cls = getCurrentClass()) {
   const value = cls ? cls.difficulty : DB.defaultDifficulty;
   return Object.hasOwn(DIFFICULTIES, value) ? value : "standard";
+}
+function difficultyDescription() {
+  if (selectedDifficulty() === "standard") return "A balanced mix of every topic in your grammar level.";
+  if (selectedDifficulty() === "challenge") return selectedForm() === 1
+    ? "Past tenses, comparatives and superlatives."
+    : "Passive voice, question tags and other trickier structures.";
+  return selectedForm() === 1 ? "Present tenses, articles, plurals and quantities."
+    : "Present tenses, articles, nouns, quantities and subject–verb agreement.";
 }
 function selectedBank(cls = getCurrentClass()) {
   const form = selectedForm(cls);
@@ -69,10 +94,16 @@ function setControlMode(value) {
   saveDB();
   renderControlMode();
   if (phase === "play" && round && !round.answered) {
-    $("feedbackLine").textContent = mode === "palms" ? "Raise your left or right open palm to answer instantly, or tap."
-      : mode === "tilt" && stream ? "Tilt left or right and hold." : "Tap an answer or use the left and right arrow keys.";
+    $("feedbackLine").textContent = answerPrompt();
   }
   if (mode === "palms" && stream) ensurePalmLoop();
+  if (mode === "tilt" && stream) loadModels(false);
+  ensureDetectionLoop();
+}
+function answerPrompt() {
+  if (controlMode() === "palms" && stream) return "Raise your left or right open palm to answer instantly.";
+  if (controlMode() === "tilt" && stream) return "Tilt left or right and hold.";
+  return compactView() ? "Tap the correct replacement." : "Click an answer or use the left and right arrow keys.";
 }
 function renderControlMode() {
   const mode = controlMode();
@@ -270,11 +301,13 @@ let DB = loadDB();
 
 let stream = null;
 let modelsReady = false;
+let recognitionReady = false;
 let modelsLoading = false;
 let detectTimer = null;
 let detecting = false;
 let faceIdentity = { samples: [], descriptor: null, match: null, ready: false, at: 0 };
 let pendingFaceCapture = null;
+let faceCaptureRequested = false;
 const indexingFaces = new Set();
 let detection = { face: false, box: null, roll: 0, student: null, distance: 0 };
 let smoothRoll = null;
@@ -356,6 +389,7 @@ function resumeQuestionTimer() {
   if (!timer || timer.startedAt !== null || phase !== "play" || round.answered
     || document.hidden || isPlayBlocked() || lostShown) return;
   timer.startedAt = performance.now();
+  syncTracking();
 }
 
 function ensureAudio() {
@@ -511,6 +545,7 @@ function toast(message, toneName, duration) {
 }
 
 function callout(message, toneName) {
+  if (quietEffects()) return;
   const el = $("callout");
   el.textContent = message;
   el.className = "callout";
@@ -519,6 +554,7 @@ function callout(message, toneName) {
 }
 
 function flashResult(ok) {
+  if (quietEffects()) return;
   const el = $("screenFlash");
   el.className = "screen-flash";
   void el.offsetWidth;
@@ -529,6 +565,7 @@ function flashResult(ok) {
 }
 
 function confettiBurst(amount) {
+  if (quietEffects()) return;
   const layer = $("confettiLayer");
   const count = amount || 34;
   for (let index = 0; index < count; index += 1) {
@@ -547,6 +584,7 @@ function confettiBurst(amount) {
 }
 
 function shakeScreen() {
+  if (quietEffects()) return;
   const app = $("app");
   app.classList.remove("shake");
   void app.offsetWidth;
@@ -555,7 +593,7 @@ function shakeScreen() {
 }
 
 function setHudStudent(student, label) {
-  const text = student ? "Your turn" : label || "Waiting for player";
+  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Grammar Tilt" : label;
   if (text !== lastHudLabel) {
     $("hudName").textContent = text;
     lastHudLabel = text;
@@ -581,7 +619,7 @@ function updateSessionHud() {
       : `ROUNDS ${session.rounds}`;
   }
   $("classSelect").disabled = active || isSolo();
-  ["classModeBtn", "singleModeBtn", "difficultySelect", "lobbyDifficulty"].forEach(id => { $(id).disabled = active; });
+  ["classModeBtn", "singleModeBtn", "difficultySelect", "lobbyDifficulty", "lobbyForm"].forEach(id => { $(id).disabled = active; });
   $("formSelect").disabled = active;
   $("newClassBtn").disabled = active;
   $("createClassBtn").disabled = active;
@@ -592,6 +630,8 @@ function updateSessionHud() {
 function setStreak(value) {
   const number = clamp(Number(value) || 0, 0, 5);
   $("streakValue").textContent = String(value || 0);
+  $("liveStreak").textContent = `${value || 0} streak`;
+  $("livePoints").textContent = `${round?.points || 0} points`;
   Array.from($("streakStars").children).forEach((star, index) => {
     star.classList.toggle("lit", index < number);
   });
@@ -602,6 +642,8 @@ function showScreen(name) {
   ["lobby", "idle", "play"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== name);
   });
+  document.body.classList.toggle("playing", name === "play");
+  syncTracking();
   window.scrollTo?.(0, 0);
   $("lobby").parentElement?.scrollTo?.(0, 0);
 }
@@ -628,47 +670,50 @@ function setCameraUI() {
   const live = Boolean(stream);
   document.body.classList.toggle("camera-on", live);
   document.body.classList.toggle("camera-off", !live);
-  $("cameraToggleBtn").textContent = live ? "STOP CAMERA" : "ENABLE CAMERA";
+  $("cameraToggleBtn").textContent = live ? "Camera on" : "Camera";
+  $("cameraToggleBtn").setAttribute("aria-label", live ? "Stop camera" : "Enable camera");
   $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
   $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
   $("calibrateBtn").disabled = !live;
-  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "◀ LEFT HAND" : controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
-  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "RIGHT HAND ▶" : controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";
+  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "◀ LEFT HAND" : controlMode() === "tilt" && live ? "◀ TILT LEFT" : compactView() ? "LEFT ANSWER" : "◀ TAP OR PRESS ←";
+  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "RIGHT HAND ▶" : controlMode() === "tilt" && live ? "TILT RIGHT ▶" : compactView() ? "RIGHT ANSWER" : "TAP OR PRESS → ▶";
   $("camDot").title = live ? "Camera live" : "Camera off";
+  document.body.classList.toggle("playing", phase === "play");
   $("cameraNote").textContent = live
     ? "Camera ready for palm control. Photo cards are optional and stay on this device."
     : "Camera is optional for buttons. Enable it for palm control or photo cards.";
+  if (phase === "play" && round && !round.answered) $("feedbackLine").textContent = answerPrompt();
   setModelStatus();
 }
 
 function setModelStatus() {
   const el = $("modelStatus");
   if (modelsReady) {
-    el.textContent = "Head tracking and face memory ready. Recognition stays on this device.";
+    el.textContent = recognitionReady ? "Head tracking and local face memory ready." : "Head tracking ready. Face memory loads only for photo players.";
   } else if (modelsLoading) {
     el.textContent = "Loading head tracking…";
   } else {
-    el.textContent = stream ? "Camera live. Load head tracking to use tilt controls." : "Camera not started.";
+    el.textContent = stream ? "Camera live. Load head tracking to use tilt controls." : "Camera off. Tracking loads only when you need it.";
   }
 }
 
 async function loadModels(force) {
-  if (!window.faceapi) {
-    toast("Face engine failed to load. Check vendor/face-api.min.js.", "bad", 4200);
-    return false;
-  }
-  if (modelsReady && !force) return true;
+  if (modelsReady && !force && (!faceCaptureRequested || recognitionReady)) return true;
   if (modelsLoading) return false;
   modelsLoading = true;
+  const withRecognition = faceCaptureRequested || recognitionReady;
+  const headsReady = modelsReady && !force;
   modelsReady = false;
   setModelStatus();
   try {
+    await loadTrackingScript("vendor/face-api.min.js", "faceapi");
     await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+      ...(headsReady ? [] : [faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)]),
+      ...(withRecognition ? [faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)] : [])
     ]);
     modelsReady = true;
+    if (withRecognition) recognitionReady = true;
     setModelStatus();
     if (stream) ensureDetectionLoop();
     indexSavedFacePhotos();
@@ -694,8 +739,9 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: "user",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 640 },
+        height: { ideal: 360 },
+        frameRate: { ideal: 30, max: 30 }
       },
       audio: false
     });
@@ -706,6 +752,7 @@ async function startCamera() {
     neutralCalibrated = false;
     resetTilt();
     setCameraUI();
+    if (controlMode() === "tilt") loadModels(false);
     ensureDetectionLoop();
     if (controlMode() === "palms") ensurePalmLoop();
     return true;
@@ -737,8 +784,18 @@ function stopCamera() {
   setCameraUI();
 }
 
+function faceTrackingNeeded() {
+  if (!stream || document.hidden || isTeacherOpen() || pendingFaceCapture) return false;
+  return phase === "idle" ? faceCaptureRequested && recognitionReady
+    : controlMode() === "tilt" && (phase === "countdown" || phase === "play" && !round?.answered && !isPlayBlocked());
+}
+function syncTracking() {
+  if (faceTrackingNeeded()) ensureDetectionLoop();
+  else if (detectTimer) { clearTimeout(detectTimer); detectTimer = null; }
+  if (typeof syncPalmLoop === "function") syncPalmLoop();
+}
 function ensureDetectionLoop() {
-  if (!stream || !modelsReady || detecting || detectTimer) return;
+  if (!faceTrackingNeeded() || !modelsReady || detecting || detectTimer) return;
   detectTimer = setTimeout(() => {
     detectTimer = null;
     detectTick();
@@ -758,7 +815,7 @@ function rollFromLandmarks(landmarks) {
 }
 
 async function detectTick() {
-  if (detecting) return;
+  if (detecting || !faceTrackingNeeded()) return;
   detecting = true;
   const generation = cameraGeneration;
   try {
@@ -772,7 +829,7 @@ async function detectTick() {
         const faces = await faceapi
           .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
           .withFaceLandmarks().withFaceDescriptors();
-        if (generation !== cameraGeneration || !stream) return;
+        if (generation !== cameraGeneration || !faceTrackingNeeded()) return;
         if (faces.length !== 1) {
           handleNoFace();
           if (faces.length > 1) setIdleStatus("One player at a time · keep other faces out of frame");
@@ -784,7 +841,7 @@ async function detectTick() {
           .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.35 }))
           .withFaceLandmarks();
       }
-      if (generation !== cameraGeneration || !stream) return;
+      if (generation !== cameraGeneration || !faceTrackingNeeded()) return;
       if (!result) {
         handleNoFace();
       } else {
@@ -796,11 +853,11 @@ async function detectTick() {
     if (generation === cameraGeneration) handleNoFace();
   } finally {
     detecting = false;
-    if (stream && modelsReady) {
+    if (faceTrackingNeeded() && modelsReady) {
       detectTimer = setTimeout(() => {
         detectTimer = null;
         detectTick();
-      }, document.hidden ? 700 : 40);
+      }, phase === "idle" ? 180 : 40);
     }
   }
 }
@@ -836,9 +893,11 @@ function handleFace(result) {
   drawFaceOverlay(result);
   drawPlayerPreview();
   if (phase === "idle" && !isUiBlocking()) updateFaceIdentity(result, now);
+  if (controlMode() === "tilt" && phase === "play") { updateTilt(now); maybeShowLost(); }
 }
 
 function handleNoFace() {
+  if (controlMode() === "tilt" && phase === "play") maybeShowLost();
   resetFaceIdentity();
   const wasFace = detection.face;
   detection = { face: false, box: null, roll: smoothRoll || 0, student: null, distance: 0 };
@@ -855,6 +914,7 @@ function handleNoFace() {
 }
 
 function drawFaceOverlay(result) {
+  if (compactView()) return;
   const canvas = $("faceOverlay");
   const video = $("camera");
   if (!video.videoWidth) return;
@@ -991,10 +1051,11 @@ function learnFaceSample(student, descriptor) {
 
 async function indexSavedFacePhotos() {
   const cls = getCurrentClass();
-  if (!modelsReady || !cls || indexingFaces.has(cls.id)) return;
+  if (!recognitionReady || !cls || indexingFaces.has(cls.id)) return;
   indexingFaces.add(cls.id);
   try {
     for (const student of cls.students) {
+      if (document.hidden || phase !== "idle" || !faceCaptureRequested) break;
       if (!student.photo || student.faceSamples?.length) continue;
       try {
         const image = new Image();
@@ -1086,10 +1147,11 @@ function renderLobby() {
   $("roundAutoHint").classList.toggle("hidden", isSolo());
   $("difficultySelect").value = selectedDifficulty();
   $("lobbyDifficulty").value = selectedDifficulty();
-  $("difficultyNote").textContent = DIFFICULTIES[selectedDifficulty()].description;
-  $("lobbyDifficultyNote").textContent = DIFFICULTIES[selectedDifficulty()].description;
+  $("difficultyNote").textContent = difficultyDescription();
+  $("lobbyDifficultyNote").textContent = difficultyDescription();
   $("drawerTitle").textContent = isSolo() ? "Your game" : "Run the class";
   $("formSelect").value = String(selectedForm());
+  $("lobbyForm").value = String(selectedForm());
   $("formSelect").disabled = Boolean(session?.active);
   $("lobbyClassName").textContent = cls ? cls.name : "No class yet";
   $("quickCreate").classList.toggle("hidden", Boolean(cls));
@@ -1347,6 +1409,7 @@ function stopSession() {
 
 function enterIdle() {
   if (!session?.active) return;
+  faceCaptureRequested = false;
   resetFaceIdentity();
   closeFaceConfirmation();
   indexSavedFacePhotos();
@@ -1404,6 +1467,21 @@ async function startTurn(existingStudent = null) {
     beginPlayer(existingStudent);
     return;
   }
+  faceCaptureRequested = true;
+  if (!modelsReady || !recognitionReady) {
+    startingTurn = true;
+    $("startTurnBtn").disabled = true;
+    try {
+      if (!stream && !await startCamera()) return;
+      if (await loadModels(false)) {
+        ensureDetectionLoop();
+        toast("Photo camera ready. Look straight ahead, then tap Capture & Play.", "good", 4200);
+      }
+    } finally { startingTurn = false; $("startTurnBtn").disabled = false; }
+    return;
+  }
+  ensureDetectionLoop();
+  indexSavedFacePhotos();
   if (!stream) {
     startingTurn = true;
     $("startTurnBtn").disabled = true;
@@ -1449,6 +1527,7 @@ function beginPlayer(student) {
   resetFaceIdentity();
   activeStudentId = student.id;
   phase = "countdown";
+  syncTracking();
   updateSessionHud();
   lostContinueUntil = 0;
   hideLost();
@@ -1623,7 +1702,7 @@ function renderQuestion() {
   $("feedbackLine").className = "feedback-line";
   $("feedbackLine").textContent = redemption
     ? "One error this round. Make this shot count."
-    : controlMode() === "palms" ? "Raise your left or right open palm to answer instantly, or tap." : controlMode() === "tilt" && stream ? "Tilt left or right and hold." : "Click an answer or use the left and right arrow keys.";
+    : answerPrompt();
   $("tiltCaption").textContent = "CENTRE YOUR HEAD";
   $("play").classList.remove("tilting-left", "tilting-right");
   ["optionLeft", "optionRight"].forEach((id) => {
@@ -1641,6 +1720,7 @@ function renderQuestion() {
   setStreak(round.streak);
   round.questionTimer = { elapsedMs: 0, startedAt: null };
   resumeQuestionTimer();
+  syncTracking();
 }
 
 function sentenceMarkup(question) {
@@ -2151,6 +2231,9 @@ function openTeacher() {
   document.body.classList.add("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "false");
   $("drawerScrim").classList.remove("hidden");
+  $("teacherPanel").inert = false;
+  $("drawerClose").focus();
+  syncTracking();
   renderTeacherRoster();
   renderTeacherMeta();
   renderSettings();
@@ -2161,16 +2244,9 @@ function closeTeacherPanel() {
   document.body.classList.remove("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "true");
   $("drawerScrim").classList.add("hidden");
+  $("teacherPanel").inert = true;
   resumeQuestionTimer();
-}
-
-function frame(now) {
-  requestAnimationFrame(frame);
-  if (phase === "play") {
-    updateTilt(now);
-    updatePalmFeedback(now);
-    maybeShowLost();
-  }
+  syncTracking();
 }
 
 function bindEvents() {
@@ -2247,6 +2323,7 @@ function bindEvents() {
     if (event.key === "Enter") $("createClassBtn").click();
   });
   $("formSelect").addEventListener("change", () => changeForm($("formSelect").value));
+  $("lobbyForm").addEventListener("change", () => changeForm($("lobbyForm").value));
   $("classSelect").addEventListener("change", () => {
     resetFaceIdentity();
     if (isSolo() || session?.active || !DB.classes[$("classSelect").value]) return;
@@ -2325,10 +2402,12 @@ function bindEvents() {
       resetTilt();
       if (typeof resetPalm === "function") resetPalm();
       stopMusic();
+      syncTracking();
     }
     else if (session?.active) {
       resumeQuestionTimer();
       startMusic();
+      syncTracking();
     }
   });
 }
@@ -2341,8 +2420,6 @@ function init() {
   refreshAll();
   renderControlMode();
   showLobby();
-  loadModels(false);
-  requestAnimationFrame(frame);
 }
 
 init();

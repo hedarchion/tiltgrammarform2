@@ -26,7 +26,7 @@ const storage = new Map([['grammartilt_v2', JSON.stringify({
   classes: { old: { name: 'Old class', students: [{ id: 'old-player', name: 'Aina', totalScore: 400,
     preset: { descriptor: Array(128).fill(0.3), thumb: 'data:photo', facePhoto: 'data:photo' }, descriptor: [1, 2] }] } }
 })]]);
-let cameraCalls = 0, modelLoads = [];
+let cameraCalls = 0, modelLoads = [], animationRequests = 0;
 const documentEvents = new Map();
 const faceapi = { nets: {
   tinyFaceDetector: { async loadFromUri() { modelLoads.push('detector'); } },
@@ -37,7 +37,7 @@ const context = vm.createContext({
   console, performance: { now: () => 1000 }, window: { faceapi }, faceapi,
   navigator: { mediaDevices: { getUserMedia() { cameraCalls++; throw new Error('Camera must stay optional'); } } },
   localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) },
-  setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 2; }, clearInterval() {}, requestAnimationFrame() {},
+  setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 2; }, clearInterval() {}, requestAnimationFrame() { animationRequests++; },
   document: { hidden: false, activeElement: null, body: element(), addEventListener(name, fn) { documentEvents.set(name, fn); },
     getElementById(id) { assert.ok(nodes.has(id), `Missing HTML element ${id}`); return nodes.get(id); },
     querySelectorAll() { return []; }, querySelector(selector) { return selector.startsWith('#') ? nodes.get(selector.slice(1)) : element(); },
@@ -49,6 +49,10 @@ run(readFileSync('questions-form1.js', 'utf8'));
 run(readFileSync('app.js', 'utf8').replace(/init\(\);\s*$/, ''));
 run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos = async () => {}; init();');
 assert.equal(run('QUESTION_BANK.length'), 1000);
+assert.deepEqual(modelLoads, [], 'home screen never loads face models');
+assert.equal(animationRequests, 0, 'home screen has no app animation loop');
+assert.ok(!html.includes('src="vendor/'), 'tracking libraries are loaded on demand');
+assert.ok(!html.includes('src="glass.js'), 'decorative WebGL renderer is not shipped');
 assert.equal(run('new Set(QUESTION_BANK.map(q => q.topic)).size'), 20);
 const migrated = JSON.parse(storage.get('grammartilt_v2'));
 assert.equal(migrated.classes.old.students[0].totalScore, 400);
@@ -59,6 +63,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('createClass("5 Bestari"); startSession();');
   assert.equal(run('phase'), 'idle', 'empty class can start');
   assert.equal(cameraCalls, 0, 'class start does not request camera');
+  assert.deepEqual(modelLoads, [], 'numbered class entry needs no models');
   assert.equal(nodes.get('classSelect').disabled, true, 'class cannot change during play');
   // Before capture, missing or stale face tracking cannot create a player.
   run('stream = {};');
@@ -138,7 +143,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   context.Image = class { async decode() {} };
   faceapi.TinyFaceDetectorOptions = function () {};
   faceapi.detectSingleFace = () => ({withFaceLandmarks: () => ({withFaceDescriptor: async () => ({descriptor:Array(128).fill(.22)})})});
-  run('currentStudents()[0].faceSamples=[]; modelsReady=true; indexSavedFacePhotos=actualIndexSavedFacePhotos;');
+  run('currentStudents()[0].faceSamples=[]; phase="idle"; faceCaptureRequested=true; modelsReady=true; indexSavedFacePhotos=actualIndexSavedFacePhotos;');
   await run('indexSavedFacePhotos();');
   assert.equal(run('currentStudents()[0].faceSamples.length'), 1, 'existing saved portraits build local matching samples');
   // More than one visible face cannot become a recognised player.
@@ -323,6 +328,30 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   console.log('Passed: direct solo start, replay, persistent personal progress, class isolation, mode/difficulty locks and solo menu flow.');
   await Promise.resolve();
   assert.deepEqual(modelLoads, ['detector', 'landmarks', 'recognition']);
+  // Head tilt needs two small models; recognition is a separate, later request.
+  run('stream=null; modelsReady=false; recognitionReady=false; faceCaptureRequested=false;');
+  await run('loadModels(false);');
+  assert.deepEqual(modelLoads.slice(3), ['detector', 'landmarks'], 'head tracking does not load face recognition');
+  run('faceCaptureRequested=true;');
+  await run('loadModels(false);');
+  assert.deepEqual(modelLoads.slice(3), ['detector', 'landmarks', 'recognition'], 'photo matching adds only its missing model');
+  run('stream={}; phase="idle"; faceCaptureRequested=false;');
+  assert.equal(run('faceTrackingNeeded()'), false, 'idle numbered players do not run face inference');
+  run('faceCaptureRequested=true;');
+  assert.equal(run('faceTrackingNeeded()'), true, 'explicit photo capture enables face inference');
+  context.document.hidden=true;
+  assert.equal(run('faceTrackingNeeded()'), false, 'hidden tabs stop face inference');
+  context.document.hidden=false;
+  run('openTeacher();');
+  assert.equal(run('faceTrackingNeeded()'), false, 'settings stop face inference');
+  run('closeTeacherPanel(); hideGameOverlays(); phase="play"; round={answered:false}; DB.settings.controlMode="palms";');
+  assert.equal(run('faceTrackingNeeded()'), false, 'palm play never runs the face tracker');
+  run('DB.settings.controlMode="tilt";');
+  assert.equal(run('faceTrackingNeeded()'), true);
+  run('round.answered=true;');
+  assert.equal(run('faceTrackingNeeded()'), false, 'head tracking stops during answer feedback');
+  assert.equal(animationRequests, 0, 'play and settings never start an animation loop');
+  console.log('Passed: lazy model loading, recognition separation, no render loop, and face inference gated by explicit use, visibility, overlays and answer state.');
   console.log('Passed: three-turn leaderboard cadence, manual view counter, rank persistence, attached character bodies, promotion/demotion and reduced motion.');
   console.log('Passed: local face recognition, stable multi-frame identity, ambiguity rejection, profile persistence/learning, existing-photo indexing, multiple-face rejection, scores and class isolation.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -8,10 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-game-modes">
-  <link rel="stylesheet" href="glass.css?v=20261021-dropdowns">
-  <script src="vendor/face-api.min.js"></script>
-  <script defer src="vendor/hands/hands.js"></script>
+  <link rel="stylesheet" href="styles.css?v=20261022-mobile">
+  <link rel="stylesheet" href="glass.css?v=20261022-mobile">
+  <link rel="stylesheet" href="mobile.css?v=20261022-mobile">
 </head>
 <body>
   <div class="app" id="app">
@@ -41,10 +40,10 @@
       </div>
 
       <div class="hud-right">
-        <button class="hud-btn camera-control" id="cameraToggleBtn" type="button" aria-pressed="false" title="Turn camera on and allow permission">ENABLE CAMERA</button>
-        <button class="hud-btn" id="leaderboardBtn" type="button" title="Show leaderboard">RANKS</button>
+        <button class="hud-btn camera-control" id="cameraToggleBtn" type="button" aria-pressed="false" title="Turn camera on and allow permission">Camera</button>
+        <button class="hud-btn" id="leaderboardBtn" type="button" title="Show leaderboard">Ranks</button>
         <button class="hud-btn" id="fullscreenBtn" type="button" title="Toggle fullscreen">FULL</button>
-        <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher settings">SETTINGS</button>
+        <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher settings">Settings</button>
       </div>
     </header>
 
@@ -63,9 +62,9 @@
     <main class="stage">
       <section class="screen lobby" id="lobby">
         <div class="logo-wrap">
-          <div class="logo-kicker">CLASSROOM ARCADE · GRAMMAR EDITION</div>
+          <div class="logo-kicker">A LITTLE PRACTICE. A LONGER STREAK.</div>
           <h1 class="logo">GRAMMAR<span>TILT</span></h1>
-          <p class="tagline">Fix the underlined error. Show a palm or tap an answer. Keep the streak alive.</p>
+          <p class="tagline">Eight questions. Two choices. Find your rhythm.</p>
         </div>
 
         <div class="game-modes" role="group" aria-label="Game mode">
@@ -84,13 +83,19 @@
 
             <div class="lobby-roster" id="lobbyRoster"></div>
 
-            <div class="lobby-difficulty">
+            <div class="lobby-setup">
+              <div class="setup-field">
+                <label for="lobbyForm" class="panel-label">GRAMMAR LEVEL</label>
+                <select class="select" id="lobbyForm"><option value="1">Form 1</option><option value="2">Form 2</option></select>
+              </div>
+              <div class="setup-field">
               <label for="lobbyDifficulty" class="panel-label">DIFFICULTY</label>
               <select class="select" id="lobbyDifficulty" aria-describedby="lobbyDifficultyNote">
-                <option value="easy">Easy · Core topics</option>
-                <option value="standard" selected>Standard · All topics</option>
-                <option value="challenge">Challenge · Trickier topics</option>
+                <option value="easy">Easy</option>
+                <option value="standard" selected>Standard</option>
+                <option value="challenge">Challenge</option>
               </select>
+              </div>
               <div class="small-note" id="lobbyDifficultyNote"></div>
             </div>
             <div class="lobby-actions">
@@ -101,13 +106,13 @@
           </div>
 
           <div class="panel lobby-side">
-            <div class="panel-label">THE RULES</div>
+            <details class="rules-details"><summary>How to play</summary>
             <ul class="rules-list">
               <li><span>8</span> questions per player</li>
               <li><span>1</span> redemption shot if exactly 1 error</li>
               <li><span>◀ ▶</span> show a palm or tap to answer</li>
               <li id="scoreRule"><span>★</span> streaks, points &amp; live ranks</li>
-            </ul>
+            </ul></details>
             <div class="small-note" id="questionBankInfo"></div>
             <div class="mini-rank" id="lobbyTop"></div>
           </div>
@@ -147,6 +152,7 @@
             <span class="meta-chip redemption" id="redemptionChip">REDEMPTION READY</span>
           </div>
           <div class="progress-dots" id="progressDots" aria-label="Round progress"></div>
+          <div class="mobile-round-score"><span id="livePoints">0 points</span><span id="liveStreak">0 streak</span></div>
         </div>
 
         <div class="sentence-card" id="sentenceCard">
@@ -163,7 +169,7 @@
           <div class="tilt-meter" id="tiltMeter">
             <div class="palm-monitor">
               <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored preview identifying your left or right hand"></canvas>
-              <div id="palmStatus" role="status">Use ENABLE CAMERA above for palm control</div>
+              <div id="palmStatus" role="status">Tap Camera for instant palm controls</div>
               <small id="palmInstantHint">Instant answer · left hand = left · right hand = right</small>
             </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
@@ -189,7 +195,7 @@
           </div>
           <div class="feedback-line" id="feedbackLine" aria-live="polite">Hold your tilt to lock in.</div>
         </div>
-        <p class="small-note">Correct answers earn up to +100 speed points. Faster answers earn more.</p>
+        <p class="small-note speed-note">Correct answers earn up to +100 speed points. Faster answers earn more.</p>
       </section>
     </main>
 
@@ -203,7 +209,7 @@
       </div>
     </div>
 
-    <div class="overlay round hidden" id="roundOverlay">
+    <div class="overlay round hidden" id="roundOverlay" role="dialog" aria-modal="true" aria-labelledby="roundName">
       <div class="round-card">
         <div class="round-portrait" id="roundPortrait"></div>
         <div class="round-kicker">ROUND COMPLETE</div>
@@ -224,7 +230,7 @@
       </div>
     </div>
 
-    <div class="overlay leaderboard hidden" id="leaderboardOverlay">
+    <div class="overlay leaderboard hidden" id="leaderboardOverlay" role="dialog" aria-modal="true" aria-labelledby="lbTitle">
       <div class="leaderboard-card">
         <div class="lb-kicker">CLASS LEADERBOARD</div>
         <h2 class="lb-title" id="lbTitle">Top grammar heroes</h2>
@@ -248,7 +254,7 @@
 
     <div class="drawer-scrim hidden" id="drawerScrim"></div>
 
-    <aside class="drawer" id="teacherPanel" aria-hidden="true">
+    <aside class="drawer" id="teacherPanel" aria-hidden="true" inert>
       <div class="drawer-head">
         <div>
           <div class="drawer-kicker">TEACHER CONSOLE</div>
@@ -260,8 +266,7 @@
       </div>
 
       <div class="drawer-body">
-        <section class="drawer-section class-only">
-          <h3>CLASS</h3>
+        <details class="drawer-section class-only settings-group" open><summary>CLASS</summary>
           <div class="row">
             <select class="select" id="classSelect" aria-label="Active class"></select>
             <button class="btn mini" id="newClassBtn" type="button">+ NEW</button>
@@ -271,15 +276,13 @@
             <button class="btn mini primary" id="createClassBtn" type="button">CREATE</button>
           </div>
           <div class="drawer-meta" id="teacherClassMeta">No class selected</div>
-        </section>
+        </details>
 
-        <section class="drawer-section class-only">
-          <h3>PLAYER PHOTOS <span class="count-badge" id="rosterCount">0</span></h3>
+        <details class="drawer-section class-only settings-group"><summary>PLAYER PHOTOS <span class="count-badge" id="rosterCount">0</span></summary>
           <div class="teacher-roster" id="teacherRoster"></div>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>GAME SETTINGS</h3>
+        <details class="drawer-section settings-group" open><summary>GAME SETTINGS</summary>
             <label for="formSelect" class="panel-label">GRAMMAR LEVEL</label>
             <select class="select" id="formSelect">
               <option value="1">Form 1 · Easy KSSM grammar</option>
@@ -288,9 +291,9 @@
             <div class="small-note">Choose a form before starting. Each class and single player remember their own choice.</div>
             <label for="difficultySelect" class="panel-label">DIFFICULTY</label>
             <select class="select" id="difficultySelect" aria-describedby="difficultyNote">
-              <option value="easy">Easy · Core topics</option>
-              <option value="standard" selected>Standard · All topics</option>
-              <option value="challenge">Challenge · Trickier topics</option>
+              <option value="easy">Easy</option>
+              <option value="standard" selected>Standard</option>
+              <option value="challenge">Challenge</option>
             </select>
             <div class="small-note" id="difficultyNote"></div>
             <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
@@ -299,10 +302,9 @@
               <option value="buttons">Big buttons / arrow keys</option>
               <option value="tilt">Head tilt · optional</option>
             </select>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>SESSION</h3>
+        <details class="drawer-section settings-group" open><summary>SESSION</summary>
           <div class="row">
             <button class="btn mini primary" id="startSessionBtn" type="button">START</button>
             <button class="btn mini danger" id="stopSessionBtn" type="button">STOP</button>
@@ -315,23 +317,20 @@
             <input class="num-input" id="lbEvery" type="number" min="1" max="20" value="3"> completed turns
           </label>
           <p class="drawer-hint class-only">The podium appears after every 3 completed player turns by default.</p>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>SOUND</h3>
+        <details class="drawer-section settings-group"><summary>SOUND</summary>
           <div class="row">
             <button class="toggle on" id="soundToggle" type="button">8-BIT SFX</button>
             <button class="toggle on" id="musicToggle" type="button">MUSIC</button>
           </div>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>PALM CONTROLS</h3>
+        <details class="drawer-section settings-group"><summary>PALM CONTROLS</summary>
           <p class="drawer-hint">Answers register on the first detected open palm, anywhere in frame. Your left hand selects the left answer; your right hand selects the right answer. The mirrored preview matches your movements. Lower or close your hand between answers. No hold timer.</p>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>TILT CONTROLS</h3>
+        <details class="drawer-section settings-group"><summary>TILT CONTROLS</summary>
           <label class="field">Tilt angle
             <select class="select" id="tiltSensitivity" aria-label="Tilt sensitivity">
               <option value="8">Small movement · 8°</option>
@@ -352,24 +351,22 @@
             <button class="toggle" id="invertTiltToggle" type="button">NORMAL</button>
           </div>
           <p class="drawer-hint">Start upright, tilt towards an answer, then return to centre before the next choice. Use RECALIBRATE if your position changes. Swap directions if the controls feel mirrored.</p>
-        </section>
+        </details>
 
-        <section class="drawer-section">
-          <h3>CAMERA &amp; HEAD TRACKING</h3>
+        <details class="drawer-section settings-group"><summary>CAMERA &amp; HEAD TRACKING</summary>
           <div class="row">
             <button class="btn mini" id="reloadModelsBtn" type="button">RELOAD FACE ENGINE</button>
           </div>
           <p class="drawer-hint" id="cameraNote">Enable the camera for palm controls or photo cards.</p>
           <div class="drawer-meta" id="modelStatus">Camera not started.</div>
-        </section>
+        </details>
 
-        <section class="drawer-section danger-zone">
-          <h3>DANGER ZONE</h3>
+        <details class="drawer-section danger-zone settings-group"><summary>DANGER ZONE</summary>
           <div class="row">
             <button class="btn mini danger" id="resetMarksBtn" type="button">RESET MARKS</button>
             <button class="btn mini danger class-only" id="deleteClassBtn" type="button">DELETE CLASS</button>
           </div>
-        </section>
+        </details>
 
         <p class="drawer-foot">Class names, photos, face-matching samples, scores and used-question history are saved in this browser on this device. A photo is saved only when you tap CAPTURE &amp; PLAY. Live video is never saved or uploaded. Clearing browser data removes saved records.</p>
       </div>
@@ -393,8 +390,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-instant-hands"></script>
-  <script src="app.js?v=20261022-instant-hands"></script>
-  <script src="glass.js"></script>
+  <script src="palm-control.js?v=20261022-mobile"></script>
+  <script src="app.js?v=20261022-mobile"></script>
+
 </body>
 </html>
