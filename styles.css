@@ -326,7 +326,7 @@ body.in-session .streak-rack { opacity: 1; transform: translateY(0); }
   text-shadow: 0 6px 0 #161d3c, 0 0 60px rgba(122, 162, 255, 0.28);
 }
 .logo span { color: var(--mint); text-shadow: 0 6px 0 #084b3c, 0 0 58px rgba(124, 255, 203, 0.42); }
-.tagline { margin: 0; color: var(--muted); font-weight: 800; font-size: clamp(15px, 1.5vw, 20px); letter-spacing: 0.01em; }
+.logo-subtitle { margin: 12px 0 0; color: var(--muted); font: 800 clamp(13px, 1.5vw, 18px) var(--body); letter-spacing: .02em; }
 .lobby-grid { display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(310px, 0.62fr); gap: clamp(14px, 1.4vw, 22px); }
 .panel {
   border: 1px solid var(--line);
@@ -1144,20 +1144,15 @@ body.teacher-open { overflow:hidden; }
 
 
 /* Appearance is independent of game rules and input controls. */
-.appearance-picker { display:flex; align-items:center; justify-content:space-between; gap:16px; }
-.appearance-copy { min-width:0; }
-.appearance-copy .small-note { margin:5px 0 0; max-width:64ch; }
+.appearance-picker { display:flex; align-items:center; justify-content:flex-end; gap:16px; }
 .appearance-options { display:flex; flex-shrink:0; padding:4px; border:1px solid var(--line); border-radius:14px; background:rgba(5,15,27,.5); gap:4px; }
 .appearance-choice { min-width:76px; min-height:44px; padding:10px 14px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--muted); font:900 13px var(--body); }
 .appearance-choice[aria-pressed="true"] { background:#284f43; color:#caffdf; border-color:#78baa0; }
 .appearance-choice:active { transform:scale(.97); }
 body.theme-lite .appearance-options { background:#10242e; border-color:#304954; }
-body.theme-lite .appearance-picker .panel-label { font:800 11px var(--body); letter-spacing:.08em; }
-body.theme-glass .logo-wrap .tagline { max-width:none; }
 @media(max-width:600px) {
   .appearance-picker { gap:10px; align-items:flex-start; }
   .appearance-choice { min-width:56px; padding-inline:10px; }
-  .appearance-copy .small-note { font-size:11px; line-height:1.4; }
 }
 
 @media(max-width:760px) {
@@ -1171,3 +1166,37 @@ body.theme-glass .logo-wrap .tagline { max-width:none; }
   body.theme-glass .hud-name { max-width:76px; font-size:12px; }
   body.theme-glass .face-card { padding-inline:6px; }
 }
+
+/* One unboxed chevron for every select, in both appearances. */
+body .select, body .drawer .select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23d0e3f2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+}
+@media (forced-colors: active) {
+  body .select, body .drawer .select { appearance: auto; background-image: none; padding-right: 14px; }
+}
+
+/* Disclosure controls use the same small, unboxed shape. */
+body .settings-group > summary, body .rules-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  list-style: none;
+}
+.settings-group > summary::-webkit-details-marker, .rules-details > summary::-webkit-details-marker { display: none; }
+.settings-group > summary::after, .rules-details > summary::after {
+  content: "";
+  flex: 0 0 7px;
+  height: 7px;
+  margin: 0 4px 0 auto;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: rotate(-45deg);
+}
+.settings-group[open] > summary::after, .rules-details[open] > summary::after { transform: rotate(45deg); }

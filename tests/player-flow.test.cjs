@@ -351,7 +351,34 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('changePlayMode("class"); setAppearance("glass");');
   assert.equal(nodes.get('liteThemeStyles').disabled, true);
   assert.equal(nodes.get('glassThemeStyles').disabled, false);
-  assert.match(nodes.get('appearancePowerNote').textContent, /more power/);
+  // Mobile defaults do not inherit an older desktop Glass preference.
+  let mobile = true, confirmResult = false, confirmations = [];
+  context.window.matchMedia = () => ({ matches: mobile, addEventListener() {} });
+  context.window.confirm = message => { confirmations.push(message); return confirmResult; };
+  run('renderAppearance();');
+  assert.equal(run('selectedAppearance()'), 'lite', 'mobile class defaults to Lite');
+  run('setAppearance("glass");');
+  assert.equal(run('selectedAppearance()'), 'lite', 'cancel preserves Lite');
+  assert.equal(nodes.get('appearanceSelect').value, 'lite', 'cancel resets settings selection');
+  assert.equal(nodes.get('glassThemeStyles').disabled, true, 'cancel does not enable glass rendering');
+  assert.match(confirmations[0], /Are you sure.*more power/);
+  confirmResult = true;
+  run('setAppearance("glass");');
+  assert.equal(run('selectedAppearance()'), 'glass', 'confirmation enables Glass');
+  run('DB=loadDB();');
+  assert.equal(run('selectedAppearance()'), 'glass', 'explicit mobile choice persists');
+  run('setAppearance("glass"); setAppearance("lite"); changePlayMode("single");');
+  assert.equal(confirmations.length, 2, 'same style and Lite need no confirmation');
+  assert.equal(run('selectedAppearance()'), 'lite', 'mobile solo also defaults to Lite');
+  mobile = false;
+  assert.equal(run('selectedAppearance()'), 'glass', 'desktop preference survives mobile changes');
+  run('changePlayMode("class");');
+  assert.equal(run('selectedAppearance()'), 'glass');
+  for (const id of ['appearanceHint','appearancePowerNote','lobbyStatus','difficultyNote','lobbyDifficultyNote']) {
+    assert.ok(!html.includes(`id="${id}"`), `${id} removed rather than hidden`);
+  }
+  assert.ok(html.includes('<title>Grammar — IdontEvenKnowHer</title>'));
+  assert.ok(html.includes('<p class="logo-subtitle">IdontEvenKnowHer</p>'));
   console.log('Passed: Glass/Lite defaults, per-mode preferences, persistence, live switching and shared game data.');
   // Head tilt needs two small models; recognition is a separate, later request.
   run('stream=null; modelsReady=false; recognitionReady=false; faceCaptureRequested=false;');

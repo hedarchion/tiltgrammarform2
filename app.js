@@ -2,13 +2,27 @@
 
 const $ = (id) => document.getElementById(id);
 // Layout and effects follow the selected UI; input and scoring stay independent.
-function compactView() { return selectedAppearance() === "lite" || Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
+function mobileDevice() { return Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
+function compactView() { return selectedAppearance() === "lite" || mobileDevice(); }
 function quietEffects() { return selectedAppearance() === "lite" || Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
 let renderedAppearance = null;
-function selectedAppearance() { return DB.settings[isSolo() ? "soloAppearance" : "classAppearance"] || (isSolo() ? "lite" : "glass"); }
+function appearanceKey() {
+  return mobileDevice() ? (isSolo() ? "mobileSoloAppearance" : "mobileClassAppearance")
+    : (isSolo() ? "soloAppearance" : "classAppearance");
+}
+function selectedAppearance() { return DB.settings[appearanceKey()] || (mobileDevice() || isSolo() ? "lite" : "glass"); }
 function setAppearance(value) {
   if (!["glass", "lite"].includes(value)) return;
-  const key = isSolo() ? "soloAppearance" : "classAppearance", previous = DB.settings[key];
+  if (value === "glass" && selectedAppearance() !== "glass" && mobileDevice()
+    && !window.confirm("Are you sure you want to use Glass? It uses more power.")) {
+    renderAppearance();
+    return;
+  }
+  applyAppearance(value);
+}
+function applyAppearance(value) {
+  if (!["glass", "lite"].includes(value)) return;
+  const key = appearanceKey(), previous = DB.settings[key];
   DB.settings[key] = value;
   if (!saveDB()) DB.settings[key] = previous;
   renderAppearance();
@@ -25,13 +39,9 @@ function renderAppearance() {
   $("glassAppearanceBtn").setAttribute("aria-pressed", String(glass));
   $("liteAppearanceBtn").setAttribute("aria-pressed", String(!glass));
   $("appearanceSelect").value = appearance;
-  const note = glass ? "Glass effects may use more power. Choose Lite for phones and tablets."
-    : "Lite uses simpler visuals to save power. Instant palm answers work in both styles.";
-  $("appearanceHint").textContent = note;
-  $("appearancePowerNote").textContent = note;
   if (renderedAppearance === appearance) return;
   renderedAppearance = appearance;
-  if (glass) loadOptionalScript("glass.js?v=20261022-appearance", "GlassRenderer").then(() => {
+  if (glass) loadOptionalScript("glass.js?v=20261022-clean", "GlassRenderer").then(() => {
     if (selectedAppearance() === "glass") window.GlassRenderer.start();
   }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
   else window.GlassRenderer?.stop();
@@ -56,9 +66,9 @@ const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
 const FORM1_BANK = Array.isArray(window.BANK_FORM1) ? window.BANK_FORM1 : [];
 function selectedForm(cls = getCurrentClass()) { return (cls ? cls.form : DB.defaultForm) === 1 ? 1 : 2; }
 const DIFFICULTIES = {
-  easy: { label: "Easy", description: "Core topics: present tenses, articles, plurals and quantities." },
-  standard: { label: "Standard", description: "A balanced mix of every topic in your grammar level." },
-  challenge: { label: "Challenge", description: "Past tenses and comparisons in Form 1; more complex structures in Form 2." }
+  easy: { label: "Easy" },
+  standard: { label: "Standard" },
+  challenge: { label: "Challenge" }
 };
 const DIFFICULTY_TOPICS = {
   1: {
@@ -73,14 +83,6 @@ const DIFFICULTY_TOPICS = {
 function selectedDifficulty(cls = getCurrentClass()) {
   const value = cls ? cls.difficulty : DB.defaultDifficulty;
   return Object.hasOwn(DIFFICULTIES, value) ? value : "standard";
-}
-function difficultyDescription() {
-  if (selectedDifficulty() === "standard") return "A balanced mix of every topic in your grammar level.";
-  if (selectedDifficulty() === "challenge") return selectedForm() === 1
-    ? "Past tenses, comparatives and superlatives."
-    : "Passive voice, question tags and other trickier structures.";
-  return selectedForm() === 1 ? "Present tenses, articles, plurals and quantities."
-    : "Present tenses, articles, nouns, quantities and subject–verb agreement.";
 }
 function selectedBank(cls = getCurrentClass()) {
   const form = selectedForm(cls);
@@ -219,6 +221,8 @@ function compareStudents(a, b) {
 const defaultSettings = {
   classAppearance: "glass",
   soloAppearance: "lite",
+  mobileClassAppearance: "lite",
+  mobileSoloAppearance: "lite",
   controlMode: "palms",
   sfx: true,
   music: true,
@@ -255,7 +259,7 @@ function normalizeStudent(raw) {
 
 function normalizeDB(raw) {
   const db = {
-    version: 6,
+    version: 7,
     playMode: raw?.playMode === "single" ? "single" : "class",
     defaultDifficulty: Object.hasOwn(DIFFICULTIES, raw?.defaultDifficulty) ? raw.defaultDifficulty : "standard",
     solo: { id: "solo", name: "Single player", form: raw?.solo?.form === 1 ? 1 : 2,
@@ -274,6 +278,9 @@ function normalizeDB(raw) {
   if (raw.settings && typeof raw.settings === "object") {
     db.settings.classAppearance = ["glass", "lite"].includes(raw.settings.classAppearance) ? raw.settings.classAppearance : "glass";
     db.settings.soloAppearance = ["glass", "lite"].includes(raw.settings.soloAppearance) ? raw.settings.soloAppearance : "lite";
+    for (const key of ["mobileClassAppearance", "mobileSoloAppearance"]) {
+      db.settings[key] = ["glass", "lite"].includes(raw.settings[key]) ? raw.settings[key] : "lite";
+    }
     db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
     db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
     db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
@@ -629,7 +636,7 @@ function shakeScreen() {
 }
 
 function setHudStudent(student, label) {
-  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Grammar Tilt" : label;
+  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Grammar" : label;
   if (text !== lastHudLabel) {
     $("hudName").textContent = text;
     lastHudLabel = text;
@@ -1183,8 +1190,6 @@ function renderLobby() {
   $("roundAutoHint").classList.toggle("hidden", isSolo());
   $("difficultySelect").value = selectedDifficulty();
   $("lobbyDifficulty").value = selectedDifficulty();
-  $("difficultyNote").textContent = difficultyDescription();
-  $("lobbyDifficultyNote").textContent = difficultyDescription();
   $("drawerTitle").textContent = isSolo() ? "Your game" : "Run the class";
   $("formSelect").value = String(selectedForm());
   $("lobbyForm").value = String(selectedForm());
@@ -1208,11 +1213,6 @@ function renderLobby() {
   $("lobbyTop").innerHTML = top.length
     ? top.map((student) => `<div class="mini-rank-row">${avatarHTML(student)}<b>${student.totalScore || 0} PTS</b></div>`).join("")
     : '<div class="drawer-meta">Marks will appear here after the first round.</div>';
-  $("lobbyStatus").textContent = isSolo()
-    ? `Your progress stays on this device · ${cls.students[0].games} ${cls.students[0].games === 1 ? "round" : "rounds"} played · ${cls.students[0].totalScore} points`
-    : !cls
-    ? "Create a class to begin."
-    : `${cls.students.length} saved players · ${unusedQuestionCount()} of ${selectedBank().length} Form ${selectedForm()} questions unused · class progress saved`;
   $("startBtn").disabled = !cls;
   const classPasses = Math.floor(unusedQuestionCount() / (30 * (QUESTIONS_PER_ROUND + 1)));
   $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused ${DIFFICULTIES[selectedDifficulty()].label.toLowerCase()} questions · ${new Set(selectedBank().map(q => q.topic)).size} Form ${selectedForm()} topics`
@@ -2319,6 +2319,10 @@ function bindEvents() {
   $("glassAppearanceBtn").addEventListener("click", () => setAppearance("glass"));
   $("liteAppearanceBtn").addEventListener("click", () => setAppearance("lite"));
   $("appearanceSelect").addEventListener("change", () => setAppearance($("appearanceSelect").value));
+  window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").addEventListener?.("change", () => {
+    renderAppearance();
+    setCameraUI();
+  });
   $("classModeBtn").addEventListener("click", () => changePlayMode("class"));
   $("singleModeBtn").addEventListener("click", () => changePlayMode("single"));
   ["difficultySelect", "lobbyDifficulty"].forEach(id => $(id).addEventListener("change", () => changeDifficulty($(id).value)));

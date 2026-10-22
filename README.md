@@ -1,4 +1,6 @@
-# Grammar Tilt
+# Grammar
+
+IdontEvenKnowHer
 
 Live app: https://hedarchion.github.io/tiltgrammarform2/
 
@@ -37,13 +39,14 @@ select another difficulty or form to use its remaining questions.
 ## Choose Glass or Lite
 
 One app includes two UI styles. Choose **Glass / Lite** on the home screen, or
-**Settings → UI style** during a round. Class mode defaults to the previous Glass
-classroom arcade; single player defaults to Lite for individual practice. Each mode
-remembers its own UI choice on this device, independently of grammar and difficulty.
+**Settings → Appearance** during a round. Phones and tablets default to Lite in both
+modes. Selecting Glass on those devices asks for confirmation because it uses more
+power. Desktop class mode defaults to Glass; single player defaults to Lite. Each
+mode remembers its choice separately for mobile and desktop layouts.
 Switching styles preserves the active question, camera controls, scores and history.
 
 **Glass** restores the translucent panels, optical refraction and camera backdrop.
-The UI notes that glass effects may use more power. Its renderer loads only when
+Its renderer loads only when
 Glass is selected; static scenes redraw on changes, and live camera refraction is
 capped at 24 fps. Selecting Lite cancels rendering callbacks, removes the optical
 canvases, disconnects its observers and releases its GPU context. Browsers without
@@ -243,7 +246,7 @@ browser camera permission when needed.
 Copy the prompt below into your coding assistant to build a similar classroom game.
 Change the app name, subject, and age group to suit your classroom. This is a build
 brief for a new app; it includes suggested features and implementation choices
-rather than a statement that every feature is implemented in Grammar Tilt.
+rather than a statement that every feature is implemented in Grammar.
 
 ```text
 Build a complete, working classroom learning game called “Grammar Arcade”.
