@@ -1246,3 +1246,17 @@ body.theme-glass .round-card { width: min(620px, 100%); min-width: 0; max-height
   body.theme-glass .round-stats div { padding: 8px 4px; }
   body.theme-glass #roundSpeedBonus { margin-block: 10px; font-size: 11px; }
 }
+
+body.theme-glass .logo, body.theme-lite .logo { font-size: clamp(18px, 5.2vw, 76px); letter-spacing: -.05em; }
+.streak-rack { background: none; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.in-session .hud { z-index: 55; }
+body.in-session .overlay { padding-top: calc(88px + env(safe-area-inset-top)); padding-bottom: 16px; }
+body.in-session .round-card { max-height: calc(100dvh - 104px - env(safe-area-inset-top)); }
+body.in-session #leaderboardBtn, body.in-session #fullscreenBtn { display: none; }
+#stopGameBtn { color: #ffd1d5; border-color: #b36c78; }
+.stop-link { display: block; margin: 10px auto 0; min-height: 44px; padding: 10px 16px; border: 0; background: none; color: var(--muted); font: 800 13px var(--body); text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-height: 700px) {
+  body.in-session .overlay { padding-top: calc(80px + env(safe-area-inset-top)); padding-bottom: 12px; }
+  body.in-session .round-card { max-height: calc(100dvh - 92px - env(safe-area-inset-top)); }
+}

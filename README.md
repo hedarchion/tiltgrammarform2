@@ -1,6 +1,4 @@
-# Grammar
-
-IdontEvenKnowHer
+# Palm2Grammar
 
 Live app: https://hedarchion.github.io/tiltgrammarform2/
 
@@ -14,7 +12,7 @@ students can play three turns each: 720 main questions plus up to 90 redemptions
 Choose **Class mode** or **Single player** on the home screen. Single player starts
 an eight-question turn directly, without a class, enrollment or camera permission.
 It keeps one personal profile, scores and question history separately from classes.
-Results wait for **Play again** or **Back to menu**; there is no player rotation or
+Results wait for **Play again** or **Menu**; there is no player rotation or
 automatic class podium. Switching back restores the selected class and its records.
 Everything stays in this browser on this device.
 
@@ -60,8 +58,8 @@ use the same immediate left/right palm selection and optional camera controls.
 
 With Camera on and palm controls selected, the same hand gestures navigate the game.
 The answer cards show mirrored hand illustrations with L/R markers. Result actions
-stay in the same spatial order: left opens ranks (or the solo menu), right continues
-to the next player (or replays solo). On player entry, left opens ranks and right
+stay in the same spatial order: left replays the same player, right continues
+to the next player (or returns to the solo menu). On player entry, left opens ranks and right
 starts a new numbered player. On ranks, right returns to the game. On the home
 screen, right starts the selected mode. These actions use the existing touch buttons.
 
@@ -70,7 +68,7 @@ between screens; there is no dwell timer. Held hands cannot skip results, create
 multiple players or answer the next question. Stale camera results are discarded
 when screens change. Settings, photo confirmation and hidden tabs suspend palm
 input. Results and ranks wait for a gesture or tap while palm navigation is active.
-Camera-off and other control modes retain their existing automatic progression.
+Every result waits for an explicit replay, next-player or Stop choice.
 The cues use one small local SVG, with no new image or model dependencies.
 
 ## Phone and tablet layout
@@ -209,8 +207,14 @@ Inference uses the lite model, detects up to two hands to catch ambiguous input,
 and runs on fresh video frames with no added wait between inference calls.
 
 **New player** starts without a portrait or face recognition. Returning
-numbered players tap their numbered card to keep their score. Photo enrollment
-remains available. Face loss does not pause palm/button play. Hand inference runs
+numbered players tap their numbered card to keep their score. In class mode,
+saved faces are recognised automatically between turns when Camera is on.
+Recognition requires a stable, unambiguous match and resumes the existing score;
+unknown faces still use Capture & Play. The previous player must leave the frame
+before face resume can select that same player again; **Play again** starts them
+directly. **Settings → Session → Face resume** turns automatic matching off.
+Face matching never runs for solo play and stops during questions and overlays.
+Photo enrollment remains available. Face loss does not pause palm/button play. Hand inference runs
 locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
 (Apache 2.0); video is not uploaded. Camera permission is needed only for gestures
 or photo capture. `node tests/palm-control.test.cjs` checks input gating.
@@ -231,10 +235,23 @@ Each completed turn saves its speed bonus and per-question answer times locally,
 and the result screen shows the speed points included in the total. Existing saved
 scores remain unchanged.
 
+## Replay and stopping
+
+Class results offer **Play again** and **Next player**. Play again starts another
+turn for the same saved player and adds to the same score, with no per-player turn
+cap. Both choices count completed turns toward the automatic leaderboard every
+three turns. When the leaderboard interrupts a replay, closing it starts the same
+player again. Replays continue to use fresh questions from the selected pool.
+Solo results offer Play again and Menu.
+
+**Stop** is visible in the game header, including during countdowns and overlays;
+the result screen also has **Stop game**. Stopping returns to the menu, preserves
+completed scores, discards the unfinished turn and releases the camera. It does
+not trigger a final leaderboard. The streak display contains only the stars.
+
 ## Podium leaderboard
 
-The leaderboard opens after every three completed player turns by default
-(configurable in Teacher → Session). There is no time-based interruption; opening
+The leaderboard opens after every three completed class turns. There is no time-based interruption; opening
 Ranks manually does not reset that count. Only players who finished a turn join
 the standings. The top three have portrait heads attached to jersey characters
 on second/first/third-place podium steps. When ranks change, characters move from
@@ -263,7 +280,7 @@ browser camera permission when needed.
 Copy the prompt below into your coding assistant to build a similar classroom game.
 Change the app name, subject, and age group to suit your classroom. This is a build
 brief for a new app; it includes suggested features and implementation choices
-rather than a statement that every feature is implemented in Grammar.
+rather than a statement that every feature is implemented in Palm2Grammar.
 
 ```text
 Build a complete, working classroom learning game called “Grammar Arcade”.

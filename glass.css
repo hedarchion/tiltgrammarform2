@@ -102,7 +102,7 @@ body.camera-on .camera-layer::after { display: none; }
 .option-charge { background: rgb(255 255 255 / .1); }
 
 /* Compact controls use less blur and a softer, capsule-shaped edge. */
-.face-card, .hud-chip, .hud-btn, .streak-rack, .meta-chip, .idle-badge,
+.face-card, .hud-chip, .hud-btn, .meta-chip, .idle-badge,
 .btn, .btn.ghost, .toggle, .manual-chip, .roster-pill {
   background: linear-gradient(160deg, rgb(255 255 255 / .14), rgb(255 255 255 / .045)), rgb(13 32 51 / .27);
   border: 1px solid rgb(255 255 255 / .24);

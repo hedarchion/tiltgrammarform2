@@ -41,7 +41,7 @@ function renderAppearance() {
   $("appearanceSelect").value = appearance;
   if (renderedAppearance === appearance) return;
   renderedAppearance = appearance;
-  if (glass) loadOptionalScript("glass.js?v=20261022-palm-nav", "GlassRenderer").then(() => {
+  if (glass) loadOptionalScript("glass.js?v=20261022-replay", "GlassRenderer").then(() => {
     if (selectedAppearance() === "glass") window.GlassRenderer.start();
   }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
   else window.GlassRenderer?.stop();
@@ -156,7 +156,7 @@ function palmControlTarget(side, context = palmControlContext()) {
   if (!["left", "right"].includes(side)) return null;
   let target = null;
   if (context === "play" && !round?.answered) target = side === "left" ? "optionLeft" : "optionRight";
-  else if (context === "round") target = side === "left" ? "roundLeaderboardBtn" : "nextPlayerBtn";
+  else if (context === "round") target = side === "left" ? "replayPlayerBtn" : "nextPlayerBtn";
   else if (context === "leaderboard" && side === "right") target = "closeLeaderboardBtn";
   else if (context === "idle") target = side === "left" ? "idleRanksBtn" : "numberedPlayerBtn";
   else if (context === "lobby" && side === "right") target = "startBtn";
@@ -173,13 +173,12 @@ function renderPalmControls() {
   const live = controlMode() === "palms" && Boolean(stream);
   document.body.classList.toggle("palm-navigation", live);
   for (const [id, side] of [["startBtn", "right"], ["idleRanksBtn", "left"], ["numberedPlayerBtn", "right"],
-    ["roundLeaderboardBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"]]) {
+    ["replayPlayerBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"]]) {
     const button = $(id);
     button.classList.add("palm-nav");
     button.setAttribute("data-palm", side);
     button.setAttribute("aria-label", live ? `${button.textContent}, ${side} palm` : button.textContent);
   }
-  $("roundAutoHint").classList.toggle("hidden", live || isSolo());
   $("lbAutoHint").classList.toggle("hidden", live);
 }
 function renderControlMode() {
@@ -193,6 +192,7 @@ const TRACKING_FRESH_MS = 450;
 const NEUTRAL_HOLD_MS = 180;
 const FACE_LOST_MS = 5000;
 const QUESTIONS_PER_ROUND = 8;
+const LEADERBOARD_INTERVAL = 3;
 const SPEED_BONUS_MAX = 100;
 const SPEED_BONUS_WINDOW_MS = 10000;
 const PRAISE = ["NICE!", "CLEAN!", "LOCKED IN!", "SHARP!", "YES!", "BOOM!"];
@@ -269,7 +269,7 @@ const defaultSettings = {
   controlMode: "palms",
   sfx: true,
   music: true,
-  lbEvery: 3,
+  faceResume: true,
   tiltThreshold: 12,
   tiltHoldMs: 550,
   invertTilt: false
@@ -302,7 +302,7 @@ function normalizeStudent(raw) {
 
 function normalizeDB(raw) {
   const db = {
-    version: 7,
+    version: 8,
     playMode: raw?.playMode === "single" ? "single" : "class",
     defaultDifficulty: Object.hasOwn(DIFFICULTIES, raw?.defaultDifficulty) ? raw.defaultDifficulty : "standard",
     solo: { id: "solo", name: "Single player", form: raw?.solo?.form === 1 ? 1 : 2,
@@ -330,7 +330,7 @@ function normalizeDB(raw) {
     db.settings.invertTilt = raw.settings.invertTilt === true;
     db.settings.sfx = raw.settings.sfx !== false;
     db.settings.music = raw.settings.music !== false;
-    db.settings.lbEvery = clamp(Number(raw.settings.lbEvery) || 3, 1, 20);
+    db.settings.faceResume = raw.settings.faceResume !== false;
   }
   if (raw.classes && typeof raw.classes === "object") {
     Object.entries(raw.classes).forEach(([id, value]) => {
@@ -394,6 +394,7 @@ let detecting = false;
 let faceIdentity = { samples: [], descriptor: null, match: null, ready: false, at: 0 };
 let pendingFaceCapture = null;
 let faceCaptureRequested = false;
+let resumeBlockedStudentId = null;
 const indexingFaces = new Set();
 let detection = { face: false, box: null, roll: 0, student: null, distance: 0 };
 let smoothRoll = null;
@@ -679,7 +680,7 @@ function shakeScreen() {
 }
 
 function setHudStudent(student, label) {
-  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Grammar" : label;
+  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Palm2Grammar" : label;
   if (text !== lastHudLabel) {
     $("hudName").textContent = text;
     lastHudLabel = text;
@@ -711,6 +712,7 @@ function updateSessionHud() {
   $("createClassBtn").disabled = active;
   $("startSessionBtn").disabled = active || !getCurrentClass();
   $("stopSessionBtn").disabled = !active;
+  $("stopGameBtn").classList.toggle("hidden", !active);
 }
 
 function setStreak(value) {
@@ -790,10 +792,10 @@ function setModelStatus() {
 }
 
 async function loadModels(force) {
-  if (modelsReady && !force && (!faceCaptureRequested || recognitionReady)) return true;
+  if (modelsReady && !force && (!faceRecognitionRequested() || recognitionReady)) return true;
   if (modelsLoading) return false;
   modelsLoading = true;
-  const withRecognition = faceCaptureRequested || recognitionReady;
+  const withRecognition = faceRecognitionRequested() || recognitionReady;
   const headsReady = modelsReady && !force;
   modelsReady = false;
   setModelStatus();
@@ -818,6 +820,7 @@ async function loadModels(force) {
   } finally {
     modelsLoading = false;
     setModelStatus();
+    if (modelsReady && !recognitionReady && faceRecognitionRequested()) prepareFaceResume();
   }
 }
 
@@ -845,6 +848,7 @@ async function startCamera() {
     resetTilt();
     setCameraUI();
     if (controlMode() === "tilt") loadModels(false);
+    prepareFaceResume();
     ensureDetectionLoop();
     if (controlMode() === "palms") ensurePalmLoop();
     return true;
@@ -858,13 +862,13 @@ async function startCamera() {
 }
 
 function stopCamera() {
-  stopPalmLoop();
+  if (typeof stopPalmLoop === "function") stopPalmLoop();
   resetFaceIdentity();
   cameraGeneration += 1;
   resetTilt();
   if (detectTimer) clearTimeout(detectTimer);
   detectTimer = null;
-  if (stream) stream.getTracks().forEach((track) => track.stop());
+  if (stream) (stream.getTracks?.() || []).forEach((track) => track.stop());
   stream = null;
   $("camera").srcObject = null;
   smoothRoll = null;
@@ -876,12 +880,29 @@ function stopCamera() {
   setCameraUI();
 }
 
+function faceResumeEnabled() {
+  return !isSolo() && DB.settings.faceResume && Boolean(session?.active)
+    && currentStudents().some(student => student.photo || student.faceSamples?.length);
+}
+function faceRecognitionRequested() {
+  return !isSolo() && (faceCaptureRequested || phase === "idle" && faceResumeEnabled());
+}
+function prepareFaceResume() {
+  if (!stream || phase !== "idle" || !faceResumeEnabled() || document.hidden || isUiBlocking()) return;
+  if (!modelsReady || !recognitionReady) {
+    if (!modelsLoading) loadModels(false);
+    return;
+  }
+  indexSavedFacePhotos();
+  ensureDetectionLoop();
+}
 function faceTrackingNeeded() {
   if (!stream || document.hidden || isTeacherOpen() || pendingFaceCapture) return false;
-  return phase === "idle" ? faceCaptureRequested && recognitionReady
+  return phase === "idle" ? !isUiBlocking() && faceRecognitionRequested() && recognitionReady
     : controlMode() === "tilt" && (phase === "countdown" || phase === "play" && !round?.answered && !isPlayBlocked());
 }
 function syncTracking() {
+  prepareFaceResume();
   if (faceTrackingNeeded()) ensureDetectionLoop();
   else if (detectTimer) { clearTimeout(detectTimer); detectTimer = null; }
   if (typeof syncPalmLoop === "function") syncPalmLoop();
@@ -989,6 +1010,7 @@ function handleFace(result) {
 }
 
 function handleNoFace() {
+  if (phase === "idle") resumeBlockedStudentId = null;
   if (controlMode() === "tilt" && phase === "play") maybeShowLost();
   resetFaceIdentity();
   const wasFace = detection.face;
@@ -999,7 +1021,7 @@ function handleNoFace() {
   $("playerPreview").getContext("2d").clearRect(0, 0, 160, 160);
   if (!wasFace) return;
   if (phase === "idle") {
-    setIdleStatus(stream ? "Look at the camera, then capture your photo" : "New numbered players need no face detection · returning players can tap their card");
+    setIdleStatus(stream && faceResumeEnabled() ? "Returning players: look at the camera." : stream ? "Look at the camera, then capture your photo" : "New players can start; returning players can tap their card.");
   } else if (phase === "lobby") {
     setHudStudent(null, "Waiting for player");
   }
@@ -1096,7 +1118,7 @@ function confidentFaceMatch(descriptor) {
 
 function resetFaceIdentity() {
   faceIdentity = { samples: [], descriptor: null, match: null, ready: false, at: 0 };
-  $("faceMatchStatus").textContent = "Face memory stays on this device · look straight ahead";
+  $("faceMatchStatus").textContent = stream && faceResumeEnabled() ? "Looking for a returning player…" : "Face matching stays on this device";
   $("startTurnBtn").textContent = "CAPTURE & PLAY";
   $("faceMatchPreview").classList.add("hidden");
   $("faceMatchPreview").innerHTML = "";
@@ -1127,8 +1149,14 @@ function updateFaceIdentity(result, now) {
   $("faceMatchStatus").textContent = faceIdentity.match
     ? "Returning face recognised · your saved score is ready"
     : faceIdentity.ready ? "Face ready · we will confirm if the match is uncertain" : "Hold still · checking several frames…";
-  setIdleStatus(faceIdentity.match ? "Recognised across several frames · tap CONTINUE MY SCORE"
+  setIdleStatus(faceIdentity.match?.id === resumeBlockedStudentId ? "Next player, step into frame." : faceIdentity.match ? "Recognised · resuming your score"
     : faceIdentity.ready ? "Ready · capture your photo, or tap your saved face" : "Look straight ahead and hold still");
+  if (phase === "idle" && faceResumeEnabled() && stream && !isUiBlocking()
+    && faceIdentity.match && faceIdentity.match.id !== resumeBlockedStudentId) {
+    const student = faceIdentity.match;
+    faceIdentity.samples.slice(-3).forEach(sample => learnFaceSample(student, sample.descriptor));
+    if (saveDB()) beginPlayer(student);
+  }
 }
 
 function learnFaceSample(student, descriptor) {
@@ -1143,11 +1171,11 @@ function learnFaceSample(student, descriptor) {
 
 async function indexSavedFacePhotos() {
   const cls = getCurrentClass();
-  if (!recognitionReady || !cls || indexingFaces.has(cls.id)) return;
+  if (isSolo() || !recognitionReady || !cls || indexingFaces.has(cls.id)) return;
   indexingFaces.add(cls.id);
   try {
     for (const student of cls.students) {
-      if (document.hidden || phase !== "idle" || !faceCaptureRequested) break;
+      if (document.hidden || phase !== "idle" || !faceRecognitionRequested()) break;
       if (!student.photo || student.faceSamples?.length) continue;
       try {
         const image = new Image();
@@ -1236,8 +1264,8 @@ function renderLobby() {
   $("scoreRule").innerHTML = `<span>★</span> ${isSolo() ? "streaks, points &amp; personal progress" : "streaks, points &amp; live ranks"}`;
   $("startBtn").textContent = isSolo() ? "START SINGLE PLAYER" : "START CLASS GAME";
   $("manageBtn").textContent = isSolo() ? "GAME SETTINGS" : "SET UP CLASS";
-  $("nextPlayerBtn").textContent = isSolo() ? "PLAY AGAIN" : "NEXT PLAYER";
-  $("roundLeaderboardBtn").textContent = isSolo() ? "MENU" : "RANKS";
+  $("nextPlayerBtn").textContent = isSolo() ? "MENU" : "NEXT PLAYER";
+  $("replayPlayerBtn").textContent = "PLAY AGAIN";
   renderPalmControls();
   $("difficultySelect").value = selectedDifficulty();
   $("lobbyDifficulty").value = selectedDifficulty();
@@ -1330,7 +1358,8 @@ function renderSettings() {
   $("tiltHold").value = String(DB.settings.tiltHoldMs);
   $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
   $("invertTiltToggle").classList.toggle("on", DB.settings.invertTilt);
-  if (document.activeElement !== $("lbEvery")) $("lbEvery").value = String(DB.settings.lbEvery);
+  $("faceResumeToggle").setAttribute("aria-pressed", String(DB.settings.faceResume));
+  $("faceResumeToggle").textContent = DB.settings.faceResume ? "FACE RESUME ON" : "FACE RESUME OFF";
   updateSoundUI();
 }
 
@@ -1493,12 +1522,13 @@ function stopSession() {
   hideGameOverlays();
   showLobby();
   updateSessionHud();
-  if (!isSolo()) showLeaderboard({ final: true, after: "lobby", auto: true });
+  stopCamera();
 }
 
 function enterIdle() {
   if (!session?.active) return;
   faceCaptureRequested = false;
+  resumeBlockedStudentId = lastFinishedId;
   resetFaceIdentity();
   closeFaceConfirmation();
   indexSavedFacePhotos();
@@ -1517,10 +1547,11 @@ function enterIdle() {
   $("idleSub").textContent = summary
     ? `Last player scored ${summary.gained}/${QUESTIONS_PER_ROUND}. Next player, step up!`
     : "Tap NEW PLAYER to play straight away, or choose a saved player.";
-  setIdleStatus(stream ? "Look at the camera, then capture your photo" : "New numbered players need no face detection · returning players can tap their card");
+  setIdleStatus(stream && faceResumeEnabled() ? "Returning players: look at the camera." : stream ? "Look at the camera, then capture your photo" : "New players can start; returning players can tap their card.");
   renderIdleRanks();
   $("questionRemaining").textContent = `${unusedQuestionCount()} fresh questions remain for this class · saved across days`;
   startMusic();
+  prepareFaceResume();
 }
 
 function showLobby() {
@@ -1542,7 +1573,7 @@ function showLobby() {
 
 let startingTurn = false;
 async function startTurn(existingStudent = null) {
-  if (startingTurn || !session?.active || phase !== "idle" || isUiBlocking()) return;
+  if (isSolo() || startingTurn || !session?.active || phase !== "idle" || isUiBlocking()) return;
   if (unusedQuestionCount() < QUESTIONS_PER_ROUND) {
     toast("Fewer than 8 unused questions remain. This class will not repeat old questions.", "warn", 6000);
     return;
@@ -1612,6 +1643,7 @@ function startNumberedPlayer() {
 }
 function beginPlayer(student) {
   if (!session?.active || phase !== "idle" || !student) return;
+  faceCaptureRequested = false;
   if (controlMode() !== "tilt") clearFaceCanvas();
   resetFaceIdentity();
   activeStudentId = student.id;
@@ -2152,48 +2184,28 @@ function showRoundOverlay(result) {
   }
   $("roundOverlay").classList.remove("hidden");
   syncTracking();
-  if (isSolo() || controlMode() === "palms" && stream) return;
-  $("nextCount").textContent = "9";
-  let left = 9;
-  const tick = () => {
-    if (phase !== "round" || $("roundOverlay").classList.contains("hidden")
-      || controlMode() === "palms" && stream) return;
-    left -= 1;
-    $("nextCount").textContent = String(Math.max(0, left));
-    if (left <= 0) {
-      nextPlayer();
-    } else {
-      after(1000, tick);
-    }
-  };
-  after(1000, tick);
 }
 
 function boardDue() {
-  if (isSolo() || !session?.active) return false;
-  return session.roundsSinceBoard >= DB.settings.lbEvery;
+  return !isSolo() && Boolean(session?.active) && session.roundsSinceBoard >= LEADERBOARD_INTERVAL;
 }
 
-function nextPlayer() {
-  if (phase !== "round") return;
-  if (isSolo()) {
-    enterIdle();
-    if (unusedQuestionCount() >= QUESTIONS_PER_ROUND) beginPlayer(currentStudents()[0]);
-    else { stopSession(); toast("No full round remains at this difficulty. Choose another difficulty or grammar level.", "warn", 6000); }
+function leaveCompletedRound(replay) {
+  if (phase !== "round" || !session?.active) return;
+  if (isSolo() && !replay) { stopSession(); return; }
+  const student = replay ? round.student : null;
+  if (replay && unusedQuestionCount() < QUESTIONS_PER_ROUND) {
+    toast("No full round remains at this difficulty. Choose another difficulty or grammar level.", "warn", 6000);
+    stopSession();
     return;
   }
   const due = boardDue();
   enterIdle();
-  if (due) showLeaderboard({ after: "idle", auto: true });
+  if (due) showLeaderboard({ after: replay ? "replay" : "idle", replayStudentId: student?.id, auto: true });
+  else if (student) beginPlayer(student);
 }
-
-function closeRoundToLeaderboard() {
-  if (phase !== "round") return;
-  if (isSolo()) { stopSession(); return; }
-  $("roundOverlay").classList.add("hidden");
-  enterIdle();
-  showLeaderboard({ after: "idle" });
-}
+function replayPlayer() { leaveCompletedRound(true); }
+function nextPlayer() { leaveCompletedRound(false); }
 
 function rankedPlayers() {
   return [...currentStudents()].filter(student => student.games > 0).sort(compareStudents);
@@ -2270,7 +2282,7 @@ function showLeaderboard(options) {
   const config = options || {};
   const final = Boolean(config.final);
   const fallbackAfter = final ? "lobby" : phase === "play" ? "resume" : "idle";
-  boardContext = { final, after: config.after || fallbackAfter };
+  boardContext = { final, after: config.after || fallbackAfter, replayStudentId: config.replayStudentId || null };
   if (session?.active) {
     if (config.auto) session.roundsSinceBoard = 0;
   }
@@ -2310,6 +2322,12 @@ function closeLeaderboard() {
   const context = boardContext;
   hideLeaderboard();
   if (!context) return;
+  if (context.after === "replay") {
+    const student = studentById(context.replayStudentId);
+    enterIdle();
+    if (student) beginPlayer(student);
+    return;
+  }
   if (context.after === "resume") {
     return;
   }
@@ -2389,8 +2407,17 @@ function bindEvents() {
   $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
   $("startSessionBtn").addEventListener("click", startSession);
   $("stopSessionBtn").addEventListener("click", stopSession);
+  $("stopGameBtn").addEventListener("click", stopSession);
+  $("roundStopBtn").addEventListener("click", stopSession);
+  $("faceResumeToggle").addEventListener("click", () => {
+    DB.settings.faceResume = !DB.settings.faceResume;
+    saveDB();
+    resetFaceIdentity();
+    renderSettings();
+    syncTracking();
+  });
   $("nextPlayerBtn").addEventListener("click", nextPlayer);
-  $("roundLeaderboardBtn").addEventListener("click", closeRoundToLeaderboard);
+  $("replayPlayerBtn").addEventListener("click", replayPlayer);
   $("closeLeaderboardBtn").addEventListener("click", closeLeaderboard);
   $("leaderboardBtn").addEventListener("click", () => {
     if (phase === "play") showLeaderboard({ after: "resume" });
@@ -2484,14 +2511,6 @@ function bindEvents() {
   });
   $("resetMarksBtn").addEventListener("click", resetMarks);
   $("deleteClassBtn").addEventListener("click", deleteClass);
-  $("lbEvery").addEventListener("input", () => {
-    const value = clamp(Number($("lbEvery").value) || 3, 1, 20);
-    DB.settings.lbEvery = value;
-    saveDB();
-  });
-  $("lbEvery").addEventListener("blur", () => {
-    $("lbEvery").value = String(DB.settings.lbEvery);
-  });
   $("lostContinueBtn").addEventListener("click", () => {
     lostContinueUntil = Date.now() + 60000;
     hideLost();

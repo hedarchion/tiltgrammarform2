@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#070b18">
-  <title>Grammar — IdontEvenKnowHer</title>
+  <title>Palm2Grammar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-palm-nav">
-  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-palm-nav" media="(min-width: 1101px) and (pointer: fine)">
-  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-palm-nav" media="(max-width: 1100px), (pointer: coarse)">
+  <link rel="stylesheet" href="styles.css?v=20261022-replay">
+  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-replay" media="(min-width: 1101px) and (pointer: fine)">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-replay" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
   <div class="app" id="app">
@@ -43,12 +43,12 @@
         <button class="hud-btn camera-control" id="cameraToggleBtn" type="button" aria-pressed="false" title="Turn camera on and allow permission">Camera</button>
         <button class="hud-btn" id="leaderboardBtn" type="button" title="Show leaderboard">Ranks</button>
         <button class="hud-btn" id="fullscreenBtn" type="button" title="Toggle fullscreen">FULL</button>
+        <button class="hud-btn hidden" id="stopGameBtn" type="button" aria-label="Stop game">Stop</button>
         <button class="hud-btn teacher" id="teacherBtn" type="button" title="Teacher settings">Settings</button>
       </div>
     </header>
 
     <div class="streak-rack" id="streakRack" aria-label="Current streak">
-      <span class="streak-label">STREAK</span>
       <div class="streak-stars" id="streakStars">
         <span class="streak-star">★</span>
         <span class="streak-star">★</span>
@@ -56,14 +56,13 @@
         <span class="streak-star">★</span>
         <span class="streak-star">★</span>
       </div>
-      <span class="streak-value" id="streakValue">0</span>
+      <span class="streak-value" id="streakValue" hidden>0</span>
     </div>
 
     <main class="stage">
       <section class="screen lobby" id="lobby">
         <div class="logo-wrap">
-          <h1 class="logo">GRAMMAR</h1>
-          <p class="logo-subtitle">IdontEvenKnowHer</p>
+          <h1 class="logo">Palm2Grammar</h1>
         </div>
 
         <div class="game-modes" role="group" aria-label="Game mode">
@@ -227,10 +226,10 @@
         </div>
         <p class="small-note" id="roundSpeedBonus">Includes +0 speed points</p>
         <div class="round-actions">
-          <button class="btn ghost" id="roundLeaderboardBtn" type="button">RANKS</button>
+          <button class="btn ghost" id="replayPlayerBtn" type="button">PLAY AGAIN</button>
           <button class="btn primary" id="nextPlayerBtn" type="button">NEXT PLAYER</button>
         </div>
-        <div class="auto-hint" id="roundAutoHint">Next player in <span id="nextCount">8</span>s</div>
+        <button class="stop-link" id="roundStopBtn" type="button">Stop game</button>
       </div>
     </div>
 
@@ -321,10 +320,8 @@
             <button class="btn mini class-only" id="showLbBtn" type="button">SHOW RANKS</button>
             <button class="btn mini" id="calibrateBtn" type="button">RECALIBRATE</button>
           </div>
-          <label class="field class-only">Leaderboard after
-            <input class="num-input" id="lbEvery" type="number" min="1" max="20" value="3"> completed turns
-          </label>
-          <p class="drawer-hint class-only">The podium appears after every 3 completed player turns by default.</p>
+          <p class="drawer-hint class-only">Ranks appear after every 3 completed turns.</p>
+          <button class="toggle class-only" id="faceResumeToggle" type="button" aria-pressed="true">FACE RESUME ON</button>
         </details>
 
         <details class="drawer-section settings-group"><summary>SOUND</summary>
@@ -335,7 +332,7 @@
         </details>
 
         <details class="drawer-section settings-group"><summary>PALM CONTROLS</summary>
-          <p class="drawer-hint">Open palm = instant choice, anywhere in frame. Left selects left; right selects right. Results: left opens ranks/menu, right continues. Player entry: right starts a numbered player. Ranks: right returns. Lower or close your hand between choices.</p>
+          <p class="drawer-hint">Open palm = instant choice, anywhere in frame. Left selects left; right selects right. Results: left plays again; right goes to the next player or menu. Player entry: right starts a numbered player. Ranks: right returns. Lower or close your hand between choices.</p>
         </details>
 
         <details class="drawer-section settings-group"><summary>TILT CONTROLS</summary>
@@ -398,8 +395,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-palm-nav"></script>
-  <script src="app.js?v=20261022-palm-nav"></script>
+  <script src="palm-control.js?v=20261022-replay"></script>
+  <script src="app.js?v=20261022-replay"></script>
 
 </body>
 </html>

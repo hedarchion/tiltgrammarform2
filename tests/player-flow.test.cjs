@@ -3,7 +3,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = readFileSync('index.html', 'utf8');
 const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
-for (const id of ['formSelect','controlModeSelect','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle','lbEvery']) {
+for (const id of ['formSelect','controlModeSelect','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle']) {
   assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
   assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
 }
@@ -111,7 +111,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('DB = loadDB(); DB.activeClass = Object.values(DB.classes).find(c => c.name === "5 Bestari").id;');
   assert.equal(run('currentStudents()[0].correctTotal'), 8, 'scores survive reload');
   assert.equal(run('currentStudents()[0].photo'), 'data:image/jpeg;base64,dGVzdA==', 'portraits survive reload');
-  run('DB.activeClass="old"; session={active:true,rounds:0}; enterIdle(); stream={}; lastTrackingAt=1000; faceIdentity={ready:true,at:1000,descriptor:Array(128).fill(.2),samples:[{descriptor:Array(128).fill(.2)}],match:null};');
+  run('DB.activeClass="old"; session={active:true,rounds:0}; enterIdle(); stream={}; detection={face:true,box:{x:400,y:160,width:200,height:240}}; lastTrackingAt=1000; faceIdentity={ready:true,at:1000,descriptor:Array(128).fill(.2),samples:[{descriptor:Array(128).fill(.2)}],match:null};');
   await run('startTurn(currentStudents()[0]);');
   assert.equal(run('currentStudents().length'), 1, 'legacy record gets a portrait without duplication');
   assert.equal(run('currentStudents()[0].totalScore'), 400, 'legacy score preserved');
@@ -149,7 +149,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('currentStudents()[0].faceSamples.length'), 1, 'existing saved portraits build local matching samples');
   // More than one visible face cannot become a recognised player.
   faceapi.detectAllFaces = () => ({withFaceLandmarks: () => ({withFaceDescriptors: async () => [{}, {}]})});
-  run('phase="idle"; stream={}; faceIdentity.ready=true;');
+  run('phase="idle"; hideGameOverlays(); stream={}; faceIdentity.ready=true;');
   await run('detectTick();');
   assert.equal(run('faceIdentity.ready'), false, 'multiple faces clear identity readiness');
   run('stream=null; session={active:true,rounds:0}; enterIdle();');
@@ -245,7 +245,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   context.performance.now = () => 1000;
   console.log('Passed: timed scoring, pause/resume, wrong and duplicate answers, speed persistence, redemption and perfect bonuses.');
   // Automatic board cadence counts completed turns; a manual view does not consume them.
-  run('session=null; createClass("Podium test"); DB.settings.lbEvery=3; DB.settings.music=false; DB.settings.sfx=false; session={active:true,rounds:0,roundsSinceBoard:0,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
+  run('session=null; createClass("Podium test"); DB.settings.music=false; DB.settings.sfx=false; session={active:true,rounds:0,roundsSinceBoard:0,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
   run('getCurrentClass().students=[normalizeStudent({id:"gold",numbered:true}),normalizeStudent({id:"silver",numbered:true}),normalizeStudent({id:"bronze",numbered:true}),normalizeStudent({id:"new",numbered:true,totalScore:9999})];');
   for(let turn=0;turn<3;turn++) {
     run(`startRound(currentStudents()[${turn}]); round.results=Array(8).fill("wrong"); finishRound();`);
@@ -297,20 +297,21 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.ok(run('round.qs.every(q => DIFFICULTY_TOPICS[2].challenge.includes(q.topic))'), 'solo uses selected difficulty');
   for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
   assert.equal(run('phase'), 'round');
-  assert.equal(nodes.get('nextPlayerBtn').textContent, 'PLAY AGAIN');
-  assert.equal(nodes.get('roundAutoHint').classList.contains('hidden'), true, 'solo has no next-player timer');
+  assert.equal(nodes.get('replayPlayerBtn').textContent, 'PLAY AGAIN');
+  assert.equal(nodes.get('nextPlayerBtn').textContent, 'MENU');
+  assert.ok(!html.includes('id="roundAutoHint"'), 'results await an explicit replay or next-player choice');
   assert.equal(run('boardDue()'), false, 'solo never triggers a class podium');
   assert.equal(run('DB.history.at(-1).classId'), 'solo', 'personal history stays separate');
   assert.equal(run('DB.history.at(-1).difficulty'), 'challenge');
   assert.equal(run('DB.history.at(-1).form'), 2);
   const soloId = run('currentStudents()[0].id');
   const soloUsed = Array.from(run('getCurrentClass().usedQuestionIds'));
-  run('nextPlayer();');
+  run('replayPlayer();');
   assert.equal(run('phase'), 'countdown', 'play again starts same player directly');
   assert.equal(run('currentStudents()[0].id'), soloId);
   run('startRound(currentStudents()[0]);');
   assert.ok(run(`round.qs.every(q => !${JSON.stringify(soloUsed)}.includes(q.id))`), 'replay never repeats used questions');
-  run('round.results=Array(8).fill("wrong"); finishRound(); closeRoundToLeaderboard();');
+  run('round.results=Array(8).fill("wrong"); finishRound(); nextPlayer();');
   assert.equal(run('phase'), 'lobby', 'back to menu ends solo');
   assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), true);
   const soloScore = run('currentStudents()[0].totalScore');
@@ -378,8 +379,10 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   for (const id of ['appearanceHint','appearancePowerNote','lobbyStatus','difficultyNote','lobbyDifficultyNote']) {
     assert.ok(!html.includes(`id="${id}"`), `${id} removed rather than hidden`);
   }
-  assert.ok(html.includes('<title>Grammar — IdontEvenKnowHer</title>'));
-  assert.ok(html.includes('<p class="logo-subtitle">IdontEvenKnowHer</p>'));
+  assert.ok(html.includes('<title>Palm2Grammar</title>'));
+  assert.ok(!html.includes('IdontEvenKnowHer'));
+  assert.ok(!html.includes('id="lbEvery"'), 'automatic leaderboard interval is fixed at three turns');
+  assert.ok(html.includes('<h1 class="logo">Palm2Grammar</h1>'));
   console.log('Passed: Glass/Lite defaults, per-mode preferences, persistence, live switching and shared game data.');
   // Head tilt needs two small models; recognition is a separate, later request.
   run('stream=null; modelsReady=false; recognitionReady=false; faceCaptureRequested=false;');
@@ -404,6 +407,76 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('round.answered=true;');
   assert.equal(run('faceTrackingNeeded()'), false, 'head tracking stops during answer feedback');
   assert.equal(animationRequests, 0, 'play and settings never start an animation loop');
+  // Replaying a class player has no per-player cap and shares the three-turn cadence.
+  run('stream=null; abortSession(); DB=normalizeDB(null); DB.settings.music=false; DB.settings.sfx=false; createClass("Repeat turns"); startSession(); startNumberedPlayer();');
+  const repeatId = run('currentStudents()[0].id');
+  const replayQuestions = new Set();
+  for (let turn=1; turn<=7; turn++) {
+    run('startRound(currentStudents()[0]);');
+    for (const id of run('round.qs.map(q=>q.id)')) {
+      assert.ok(!replayQuestions.has(id), 'replay uses fresh questions');
+      replayQuestions.add(id);
+    }
+    run('round.results=Array(8).fill("wrong"); finishRound();');
+    assert.equal(nodes.get('replayPlayerBtn').textContent, 'PLAY AGAIN');
+    assert.equal(nodes.get('nextPlayerBtn').textContent, 'NEXT PLAYER');
+    assert.equal(run('currentStudents()[0].games'), turn);
+    assert.equal(run('currentStudents().length'), 1, 'replay never creates another profile');
+    run('replayPlayer();');
+    assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), turn%3!==0,
+      'both replay and next-player choices reveal ranks after exactly three turns');
+    if (turn%3===0) {
+      assert.equal(run('boardContext.replayStudentId'), repeatId);
+      run('closeLeaderboard();');
+    }
+    assert.equal(run('phase'), 'countdown');
+    assert.equal(run('activeStudentId'), repeatId, 'replay survives the automatic leaderboard');
+  }
+  const historyBeforeStop = run('DB.history.length');
+  let stoppedTracks = 0;
+  context.stopTestStream = {getTracks:()=>[{stop(){stoppedTracks++;}}]};
+  run('stream=stopTestStream;');
+  nodes.get('stopGameBtn').click();
+  assert.equal(run('phase'), 'lobby', 'visible Stop works during countdown');
+  assert.equal(run('stream'), null, 'Stop releases the camera');
+  assert.equal(stoppedTracks, 1);
+  assert.equal(run('session'), null);
+  assert.equal(run('DB.history.length'), historyBeforeStop, 'Stop preserves completed turns');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), true, 'Stop returns home without an unsolicited podium');
+  run('startSession(); startNumberedPlayer(); startRound(currentStudents().at(-1));');
+  nodes.get('stopGameBtn').click();
+  assert.equal(run('phase'), 'lobby', 'Stop works during a question');
+  run('startSession(); startNumberedPlayer(); startRound(currentStudents().at(-1)); round.results=Array(8).fill("wrong"); finishRound();');
+  nodes.get('roundStopBtn').click();
+  assert.equal(run('phase'), 'lobby', 'result Stop ends the session');
+  assert.equal(nodes.get('stopGameBtn').classList.contains('hidden'), true, 'Stop is hidden after the session ends');
+  // Existing class portraits resume automatically, with no enrollment or new profile.
+  run('currentStudents().splice(0); currentStudents().push(normalizeStudent({id:"returning",photo:"data:image/jpeg;base64,dGVzdA==",faceSamples:[Array(128).fill(.15)],games:12,totalScore:1700})); modelsReady=false; recognitionReady=false; stream={}; startSession();');
+  for (let i=0;i<8;i++) await Promise.resolve();
+  assert.equal(run('recognitionReady'), true, 'class entry lazily restores recognition models for saved faces');
+  assert.equal(run('faceTrackingNeeded()'), true, 'saved class players enable face resume between turns');
+  for (const at of [1000,1200,1400]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
+  assert.equal(run('phase'), 'countdown', 'stable returning face starts its saved player');
+  assert.equal(run('activeStudentId'), 'returning');
+  assert.equal(run('currentStudents().length'), 1);
+  assert.equal(run('currentStudents()[0].totalScore'), 1700);
+  run('startRound(currentStudents()[0]); round.results=Array(8).fill("wrong"); finishRound(); nextPlayer();');
+  for (const at of [1600,1800,2000]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
+  assert.equal(run('phase'), 'idle', 'Next player does not immediately restart the face still in frame');
+  run('handleNoFace();');
+  for (const at of [2200,2400,2600]) run(`updateFaceIdentity({descriptor:Array(128).fill(.151),detection:{box:{width:200,height:240},score:.95}},${at});`);
+  assert.equal(run('phase'), 'countdown', 'a returning player can resume again without a turn limit');
+  run('enterIdle();');
+  nodes.get('faceResumeToggle').click();
+  assert.equal(run('DB.settings.faceResume'), false);
+  run('DB=loadDB();');
+  assert.equal(run('DB.settings.faceResume'), false, 'face-resume option persists');
+  assert.equal(run('faceTrackingNeeded()'), false, 'teacher can disable automatic face resume');
+  run('stopSession(); changePlayMode("single"); stream={}; startSession();');
+  assert.equal(run('faceResumeEnabled()'), false, 'single player never resumes by face');
+  assert.equal(run('faceRecognitionRequested()'), false);
+  run('stopSession();');
+  console.log('Passed: unlimited class replay, three-turn cadence through replay, automatic class face resume, face-resume toggle and visible Stop across questions/countdowns/results.');
   // Real hand-result routing through the same buttons used by touch input.
   run('stream=null; abortSession(); DB=normalizeDB(null); DB.settings.music=false; DB.settings.sfx=false; createClass("Palm navigation");');
   run(readFileSync('palm-control.js', 'utf8'));
@@ -456,11 +529,11 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('palmControlContext()'), null, 'palm navigation cannot confirm a photo identity');
   run('pendingFaceCapture=null; stream=null; abortSession(); changePlayMode("single"); startSession(); startRound(currentStudents()[0]); stream={}; renderControlMode();');
   run('round.results=Array(8).fill("wrong"); finishRound();');
-  gesture(null); gesture('right');
-  assert.equal(run('phase'), 'countdown', 'right palm replays single player');
-  run('startRound(currentStudents()[0]); round.results=Array(8).fill("wrong"); finishRound();');
   gesture(null); gesture('left');
-  assert.equal(run('phase'), 'lobby', 'left palm returns solo results to menu');
+  assert.equal(run('phase'), 'countdown', 'left palm replays single player');
+  run('startRound(currentStudents()[0]); round.results=Array(8).fill("wrong"); finishRound();');
+  gesture(null); gesture('right');
+  assert.equal(run('phase'), 'lobby', 'right palm returns solo results to menu');
   gesture('right');
   assert.equal(run('phase'), 'lobby', 'held menu palm cannot restart the game');
   run('stream=null; syncTracking();');
