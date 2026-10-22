@@ -1338,9 +1338,6 @@ function renderLobby() {
     ? top.map((student) => `<div class="mini-rank-row">${avatarHTML(student)}<b>${student.totalScore || 0} PTS</b></div>`).join("")
     : '<div class="drawer-meta">Marks will appear here after the first round.</div>';
   $("startBtn").disabled = !cls;
-  const classPasses = Math.floor(unusedQuestionCount() / (30 * (QUESTIONS_PER_ROUND + 1)));
-  $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused ${DIFFICULTIES[selectedDifficulty()].label.toLowerCase()} questions · ${new Set(selectedBank().map(q => q.topic)).size} Form ${selectedForm()} topics`
-    + (isSolo() ? " · personal question history" : ` · ${classPasses} full rounds for 30 players, including redemption`);
 }
 
 function renderIdleRanks() {

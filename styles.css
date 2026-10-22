@@ -1109,7 +1109,7 @@ body.teacher-open .drawer { transform: none; }
 
 /* Game setup shares the existing arcade panels and keeps choices keyboard accessible. */
 .game-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.mode-choice { padding: 16px 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 11, 25, .8); color: var(--ink); text-align: left; cursor: pointer; transition: transform 140ms ease-out, border-color 140ms ease-out; }
+.mode-choice { padding: 16px 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 11, 25, .8); color: var(--ink); text-align: center; cursor: pointer; transition: transform 140ms ease-out, border-color 140ms ease-out; }
 .mode-choice b { display: block; font-family: var(--pixel); font-size: 10px; line-height: 1.6; }
 .mode-choice span { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; }
 .mode-choice[aria-pressed="true"] { border-color: var(--mint); background: rgba(18, 71, 59, .8); box-shadow: inset 0 0 0 1px var(--mint); }
