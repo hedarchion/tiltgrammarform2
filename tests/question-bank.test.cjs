@@ -162,17 +162,40 @@ run('changeForm(2);');
 assert.equal(run('selectedForm()'),2,'existing class can switch forms');
 console.log('Passed: choosing a form before class creation and inheriting the selection.');
 
-assert.equal(run('normalizeDB({settings:{}}).settings.palmHoldMs'),800,'old settings retain standard hold');
-run('setPalmHoldMs(1500); DB=loadDB();');
-assert.equal(run('DB.settings.palmHoldMs'),1500,'palm timing survives reload');
-assert.equal(elements.get('palmHold').value,'1500');
-assert.equal(elements.get('palmHoldHint').textContent,'Hold 1.5s · lower hand to reset');
-run('setPalmHoldMs(12);');
-assert.equal(run('DB.settings.palmHoldMs'),1500,'invalid duration ignored');
-storageFails=true;
-run('setPalmHoldMs(2000);');
-assert.equal(run('DB.settings.palmHoldMs'),1500,'failed save restores prior hold duration');
-storageFails=false;
-console.log('Passed: palm duration persistence, controls, instructions and failed-save rollback.');
+assert.equal(run('"palmHoldMs" in normalizeDB({settings:{palmHoldMs:3000}}).settings'),false,'legacy hold durations cannot slow down instant controls');
+assert.equal(run('"palmHoldMs" in normalizeDB(null).settings'),false,'new settings have no palm hold timer');
+console.log('Passed: legacy palm hold settings are discarded; palm input has no duration setting.');
 
 console.log('Passed: balanced topics, changing topic order and 24-question construction spacing for both forms, including saved history and redemption.');
+
+// Every form/difficulty combination has a usable, constrained question pool.
+run('session=null;');
+for (const form of [1, 2]) {
+  for (const difficulty of ['easy', 'standard', 'challenge']) {
+    run(`DB.classes.difficulty={id:"difficulty",name:"Difficulty",form:${form},difficulty:"${difficulty}",students:[],usedQuestionIds:[]};DB.activeClass="difficulty";`);
+    const pool = run('selectedBank()');
+    assert.ok(pool.length >= 300, `${form}/${difficulty} has enough questions`);
+    assert.equal(pool.length, difficulty === 'standard' ? 1000 : form === 2 ? 300 : difficulty === 'challenge' ? 400 : 600);
+    run('session={active:true,classId:"difficulty",questionDeck:shuffledQuestions()};');
+    const reserved = [];
+    for (let i = 0; i < 17; i++) {
+      const question = run('pickQuestion()');
+      assert.ok(pool.some(q => q.id === question.id), 'main and redemption picks stay in difficulty pool');
+      reserved.push(question.id);
+    }
+    assert.equal(new Set(reserved).size, 17);
+    run('session=null; changeDifficulty("standard"); session={active:true,classId:"difficulty",questionDeck:shuffledQuestions()};');
+    assert.ok(run(`session.questionDeck.every(q=>!${JSON.stringify(reserved)}.includes(q.id))`), 'changing difficulty preserves shared question history');
+    run('session=null;');
+  }
+}
+run('changeDifficulty("challenge"); saveDB(); DB=loadDB();');
+assert.equal(run('selectedDifficulty()'), 'challenge', 'difficulty persists');
+run('changeDifficulty("invalid");');
+assert.equal(run('selectedDifficulty()'), 'challenge', 'invalid difficulty ignored');
+storageFails = true;
+run('changeDifficulty("easy"); changePlayMode("single");');
+assert.equal(run('selectedDifficulty()'), 'challenge', 'failed difficulty save rolls back');
+assert.equal(run('isSolo()'), false, 'failed mode save rolls back');
+storageFails = false;
+console.log('Passed: all six form/difficulty pools, constrained selection, shared nonrepeat history, persistence, validation and save rollback.');

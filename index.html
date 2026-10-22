@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261021-developer-credit">
+  <link rel="stylesheet" href="styles.css?v=20261022-game-modes">
   <link rel="stylesheet" href="glass.css?v=20261021-dropdowns">
   <script src="vendor/face-api.min.js"></script>
   <script defer src="vendor/hands/hands.js"></script>
@@ -68,9 +68,13 @@
           <p class="tagline">Fix the underlined error. Show a palm or tap an answer. Keep the streak alive.</p>
         </div>
 
+        <div class="game-modes" role="group" aria-label="Game mode">
+          <button class="mode-choice" id="classModeBtn" type="button" aria-pressed="true"><b>CLASS MODE</b><span>Take turns. Climb the class ranks.</span></button>
+          <button class="mode-choice" id="singleModeBtn" type="button" aria-pressed="false"><b>SINGLE PLAYER</b><span>Practise on your own. Beat your score.</span></button>
+        </div>
         <div class="lobby-grid">
           <div class="panel lobby-main">
-            <div class="panel-label">TODAY'S CLASS</div>
+            <div class="panel-label" id="lobbyModeLabel">TODAY'S CLASS</div>
             <div class="lobby-class-name" id="lobbyClassName">No class yet</div>
 
             <div class="quick-create hidden" id="quickCreate">
@@ -80,6 +84,15 @@
 
             <div class="lobby-roster" id="lobbyRoster"></div>
 
+            <div class="lobby-difficulty">
+              <label for="lobbyDifficulty" class="panel-label">DIFFICULTY</label>
+              <select class="select" id="lobbyDifficulty" aria-describedby="lobbyDifficultyNote">
+                <option value="easy">Easy · Core topics</option>
+                <option value="standard" selected>Standard · All topics</option>
+                <option value="challenge">Challenge · Trickier topics</option>
+              </select>
+              <div class="small-note" id="lobbyDifficultyNote"></div>
+            </div>
             <div class="lobby-actions">
               <button class="btn primary" id="startBtn" type="button">START CLASS GAME</button>
               <button class="btn ghost" id="manageBtn" type="button">SET UP CLASS</button>
@@ -93,7 +106,7 @@
               <li><span>8</span> questions per player</li>
               <li><span>1</span> redemption shot if exactly 1 error</li>
               <li><span>◀ ▶</span> show a palm or tap to answer</li>
-              <li><span>★</span> streaks, points &amp; live ranks</li>
+              <li id="scoreRule"><span>★</span> streaks, points &amp; live ranks</li>
             </ul>
             <div class="small-note" id="questionBankInfo"></div>
             <div class="mini-rank" id="lobbyTop"></div>
@@ -149,9 +162,9 @@
 
           <div class="tilt-meter" id="tiltMeter">
             <div class="palm-monitor">
-              <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored hand tracking preview with left and right guides"></canvas>
+              <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored preview identifying your left or right hand"></canvas>
               <div id="palmStatus" role="status">Use ENABLE CAMERA above for palm control</div>
-              <small id="palmHoldHint">Hold 0.8s · lower hand to reset</small>
+              <small id="palmInstantHint">Instant answer · left hand = left · right hand = right</small>
             </div>
             <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
             <div class="tilt-ring">
@@ -176,6 +189,7 @@
           </div>
           <div class="feedback-line" id="feedbackLine" aria-live="polite">Hold your tilt to lock in.</div>
         </div>
+        <p class="small-note">Correct answers earn up to +100 speed points. Faster answers earn more.</p>
       </section>
     </main>
 
@@ -201,11 +215,12 @@
           <div><b id="roundStreak">0</b><span>BEST STREAK</span></div>
           <div><b id="roundRetries">0</b><span>REDEMPTIONS</span></div>
         </div>
+        <p class="small-note" id="roundSpeedBonus">Includes +0 speed points</p>
         <div class="round-actions">
           <button class="btn primary" id="nextPlayerBtn" type="button">NEXT PLAYER</button>
           <button class="btn ghost" id="roundLeaderboardBtn" type="button">LEADERBOARD</button>
         </div>
-        <div class="auto-hint">Next player in <span id="nextCount">8</span>s</div>
+        <div class="auto-hint" id="roundAutoHint">Next player in <span id="nextCount">8</span>s</div>
       </div>
     </div>
 
@@ -237,7 +252,7 @@
       <div class="drawer-head">
         <div>
           <div class="drawer-kicker">TEACHER CONSOLE</div>
-          <div class="drawer-title">Run the class</div>
+          <div class="drawer-title" id="drawerTitle">Run the class</div>
         </div>
         <button class="drawer-close" id="drawerClose" type="button" aria-label="Close teacher console">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
@@ -245,7 +260,7 @@
       </div>
 
       <div class="drawer-body">
-        <section class="drawer-section">
+        <section class="drawer-section class-only">
           <h3>CLASS</h3>
           <div class="row">
             <select class="select" id="classSelect" aria-label="Active class"></select>
@@ -258,7 +273,7 @@
           <div class="drawer-meta" id="teacherClassMeta">No class selected</div>
         </section>
 
-        <section class="drawer-section">
+        <section class="drawer-section class-only">
           <h3>PLAYER PHOTOS <span class="count-badge" id="rosterCount">0</span></h3>
           <div class="teacher-roster" id="teacherRoster"></div>
         </section>
@@ -270,10 +285,17 @@
               <option value="1">Form 1 · Easy KSSM grammar</option>
               <option value="2" selected>Form 2 · Original questions</option>
             </select>
-            <div class="small-note">Choose a form before starting. Each class remembers its choice.</div>
+            <div class="small-note">Choose a form before starting. Each class and single player remember their own choice.</div>
+            <label for="difficultySelect" class="panel-label">DIFFICULTY</label>
+            <select class="select" id="difficultySelect" aria-describedby="difficultyNote">
+              <option value="easy">Easy · Core topics</option>
+              <option value="standard" selected>Standard · All topics</option>
+              <option value="challenge">Challenge · Trickier topics</option>
+            </select>
+            <div class="small-note" id="difficultyNote"></div>
             <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
             <select class="select" id="controlModeSelect">
-              <option value="palms">Open palm · visible hand tracking</option>
+              <option value="palms">Open palm · instant left / right hand</option>
               <option value="buttons">Big buttons / arrow keys</option>
               <option value="tilt">Head tilt · optional</option>
             </select>
@@ -286,13 +308,13 @@
             <button class="btn mini danger" id="stopSessionBtn" type="button">STOP</button>
           </div>
           <div class="row">
-            <button class="btn mini" id="showLbBtn" type="button">SHOW RANKS</button>
+            <button class="btn mini class-only" id="showLbBtn" type="button">SHOW RANKS</button>
             <button class="btn mini" id="calibrateBtn" type="button">RECALIBRATE</button>
           </div>
-          <label class="field">Leaderboard after
+          <label class="field class-only">Leaderboard after
             <input class="num-input" id="lbEvery" type="number" min="1" max="20" value="3"> completed turns
           </label>
-          <p class="drawer-hint">The podium appears after every 3 completed player turns by default.</p>
+          <p class="drawer-hint class-only">The podium appears after every 3 completed player turns by default.</p>
         </section>
 
         <section class="drawer-section">
@@ -305,16 +327,7 @@
 
         <section class="drawer-section">
           <h3>PALM CONTROLS</h3>
-          <label class="field">Hold to confirm
-            <select class="select" id="palmHold" aria-label="Palm hold duration"><option value="400">0.4 seconds · Fast</option>
-                <option value="600">0.6 seconds</option>
-                <option value="800" selected>0.8 seconds · Standard</option>
-                <option value="1000">1 second</option>
-                <option value="1500">1.5 seconds</option>
-                <option value="2000">2 seconds</option>
-                <option value="3000">3 seconds · Deliberate</option></select>
-          </label>
-          <p class="drawer-hint">Choose how long to hold an open palm over an answer. Lower your hand before each answer. Changes apply immediately and stay saved on this device.</p>
+          <p class="drawer-hint">Answers register on the first detected open palm, anywhere in frame. Your left hand selects the left answer; your right hand selects the right answer. The mirrored preview matches your movements. Lower or close your hand between answers. No hold timer.</p>
         </section>
 
         <section class="drawer-section">
@@ -354,7 +367,7 @@
           <h3>DANGER ZONE</h3>
           <div class="row">
             <button class="btn mini danger" id="resetMarksBtn" type="button">RESET MARKS</button>
-            <button class="btn mini danger" id="deleteClassBtn" type="button">DELETE CLASS</button>
+            <button class="btn mini danger class-only" id="deleteClassBtn" type="button">DELETE CLASS</button>
           </div>
         </section>
 
@@ -380,8 +393,8 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261021-palm-stability"></script>
-  <script src="app.js?v=20261020-camera-control"></script>
+  <script src="palm-control.js?v=20261022-instant-hands"></script>
+  <script src="app.js?v=20261022-instant-hands"></script>
   <script src="glass.js"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 const fs=require('node:fs'), vm=require('node:vm'),assert=require('node:assert/strict');
 const ctx=vm.createContext({console});
-vm.runInContext(fs.readFileSync('palm-control.js','utf8'),ctx);
+const source=fs.readFileSync('palm-control.js','utf8');
+vm.runInContext(source,ctx);
 const P=vm.runInContext('PalmInput',ctx);
 function hand(x,open=true,scale=1) {
   const points=Array.from({length:21},()=>({x:1-x,y:.6}));
@@ -11,74 +12,93 @@ function hand(x,open=true,scale=1) {
   }
   return points;
 }
-const left=hand(.28),right=hand(.72);
-assert.equal(P.describe(left).side,'left','mirrored preview maps to screen left');
-assert.equal(P.describe(right).side,'right');
-assert.equal(P.describe(left).open,true);
+// The bundled legacy model sees raw, unmirrored video: its labels must be swapped.
+const physicalLeft={label:'Right',score:.95},physicalRight={label:'Left',score:.95};
+const leftPosition=hand(.28), rightPosition=hand(.72);
+assert.equal(P.sideFromHandedness(physicalLeft),'left');
+assert.equal(P.sideFromHandedness(physicalRight),'right');
+assert.equal(P.sideFromHandedness({label:'Left',score:.49}),null);
+assert.equal(P.sideFromHandedness({label:'Left'}),null);
+assert.equal(P.sideFromHandedness({label:'Unknown',score:.9}),null);
+assert.equal(P.describe(leftPosition,16/9,physicalRight).side,'right','identity overrides screen position');
+assert.equal(P.describe(rightPosition,16/9,physicalLeft).side,'left','crossed hand keeps physical identity');
+assert.equal(P.describe(hand(.5),16/9,physicalLeft).eligible,true,'centre needs no guide');
+assert.equal(P.describe(hand(.98),16/9,physicalRight).eligible,true,'edge needs no guide');
+assert.equal(P.describe(leftPosition).side,null,'never guess identity from position');
 assert.equal(P.describe(hand(.3,false)).open,false);
+assert.equal(P.describe([]),null);
+
 const state=P.createState();
-const tick=(hands,t,enabled=true)=>P.step(state,hands,t,enabled);
-assert.ok(!tick([left],0).answer,'raised hand on entry cannot submit');
-tick([],10);tick([],400);
-tick([left],450);tick([left],850);
-assert.equal(tick([left],1250).answer,'left','fresh continuous hold submits');
-assert.ok(!tick([left],1700).answer,'held hand cannot repeat on next question');
-tick([],1800);tick([],2200);tick([right],2300);
-tick([left],2600);
-assert.ok(!tick([left],3000).answer,'switching sides restarts hold');
-assert.equal(tick([left],3400).answer,'left');
-tick([],3500);tick([],3900);tick([left],4000);
-assert.ok(!tick([left],5000).answer,'stale gap resets hold');
-tick([left,right],5100);assert.equal(state.latched,true,'multiple hands require release');
-assert.ok(!tick([left],5600).answer);
-tick([],5700);tick([],6100);tick([left],6200);
-tick([left],6600,false);assert.equal(state.latched,true,'blocked or hidden play disarms');
-assert.ok(!tick([left],7100).answer);
-assert.equal(P.describe(hand(.3,true,.1)).eligible,false,'small background hands ignored');
-assert.equal(P.describe(hand(.98)).eligible,false,'hands outside guide ignored');
-console.log('Passed: palm position, open-hand gate, deliberate hold, release-to-rearm, side changes, stale frames, multiple hands and blocked play.');
+const tick=(hands,labels,t,enabled=true)=>P.step(state,hands,labels,t,enabled);
+assert.equal(tick([leftPosition],[physicalRight],0).answer,'right','first classified frame answers immediately');
+assert.ok(!tick([leftPosition],[physicalRight],1).answer,'continuous palm cannot repeat');
+assert.ok(!tick([rightPosition],[physicalLeft],2).answer,'switching identity without release cannot repeat');
+tick([],[],3);
+assert.equal(tick([rightPosition],[physicalLeft],4).answer,'left','one empty frame rearms without release delay');
+tick([hand(.3,false)],[physicalLeft],5);
+assert.equal(tick([hand(.5)],[physicalLeft],6).answer,'left','closing then opening rearms immediately');
+assert.ok(!tick([leftPosition],[physicalLeft],10000).answer,'a time gap alone never rearms a held palm');
+tick([leftPosition],[physicalLeft],10001,false);
+assert.ok(!tick([leftPosition],[physicalLeft],10002).answer,'blocked question cannot carry a raised palm forward');
+tick([],[],10003,false);
+assert.equal(tick([leftPosition],[physicalLeft],10004).answer,'left','release during feedback readies next question');
 
-for (const holdMs of [400,600,800,1000,1500,2000,3000]) {
-  const custom=P.createState();
-  P.step(custom,[],0,true,holdMs); P.step(custom,[],350,true,holdMs);
-  for(let elapsed=0;elapsed<holdMs;elapsed+=100) {
-    const result=P.step(custom,[left],400+elapsed,true,holdMs);
-    assert.ok(!result.answer,`${holdMs}ms must not confirm early`);
-    assert.equal(result.ratio,elapsed/holdMs,'progress uses chosen duration');
-  }
-  assert.equal(P.step(custom,[left],400+holdMs,true,holdMs).answer,'left');
-}
-console.log('Passed: all seven palm hold durations and proportional progress.');
+const uncertain=P.createState();
+assert.ok(!P.step(uncertain,[leftPosition],[],0,true).answer,'missing handedness cannot submit');
+assert.ok(!P.step(uncertain,[leftPosition],[{label:'Right',score:.4}],1,true).answer);
+assert.equal(P.step(uncertain,[leftPosition],[physicalLeft],2,true).answer,'left','first classified frame submits with no extra confirmation');
+const multiple=P.createState();
+assert.ok(!P.step(multiple,[leftPosition,rightPosition],[physicalLeft,physicalRight],0,true).answer,'two open palms are ambiguous');
+assert.equal(P.step(multiple,[rightPosition],[physicalRight],1,true).answer,'right','one remaining palm submits immediately');
+const closedOther=P.createState();
+assert.equal(P.step(closedOther,[leftPosition,hand(.72,false)],[physicalLeft,physicalRight],0,true).answer,'left','closed other hand does not block the answer');
+function resized(points,scale) { return points.map(p=>({x:.7+(p.x-.7)*scale,y:.6+(p.y-.6)*scale})); }
+assert.equal(P.describe(resized(leftPosition,.35)).eligible,true,'narrow upright palms qualify');
+assert.equal(P.describe(resized(leftPosition,.1)).eligible,false,'tiny background hands stay excluded');
+assert.match(P.step(P.createState(),[resized(leftPosition,.1)],[physicalLeft],0,true).status,/too small/);
+console.log('Passed: immediate physical left/right selection, mirrored label correction, crossed/central/edge hands, release without dwell, repeat prevention, blocked play, uncertainty and multiple hands.');
 
-// Realistic size changes scale both dimensions around the palm centre.
-function resized(points, scale) {
-  return points.map(p=>({x:.7+(p.x-.7)*scale,y:.6+(p.y-.6)*scale}));
-}
-assert.equal(P.describe(resized(left,.35)).eligible,true,'upright palm below old 10% width threshold is accepted');
-assert.equal(P.describe(resized(left,.1)).eligible,false,'genuinely small background palms remain excluded');
-function armed() {
-  const s=P.createState();P.step(s,[],0,true);P.step(s,[],350,true);return s;
-}
-const dropout=armed();
-P.step(dropout,[left],400,true);P.step(dropout,[left],600,true);
-assert.equal(P.step(dropout,[],650,true).ratio,.25,'brief loss keeps progress');
-assert.equal(P.step(dropout,[left],750,true).ratio,.25,'recovery does not count missing time');
-assert.equal(P.step(dropout,[left],950,true).ratio,.5);
-assert.ok(!P.step(dropout,[],1000,true).answer,'missing frame cannot submit');
-assert.equal(P.step(dropout,[left],1250,true).ratio,0,'late recovery restarts hold even without another missing frame');
-const expired=armed();
-P.step(expired,[left],400,true);P.step(expired,[left],600,true);
-assert.equal(P.step(expired,[],850,true).ratio,0,'long loss clears progress');
-const boundary=armed();
-P.step(boundary,[hand(.43)],400,true);P.step(boundary,[hand(.43)],600,true);
-assert.equal(P.step(boundary,[hand(.46)],700,true).ratio,.375,'small boundary movement preserves hold');
-assert.equal(P.step(boundary,[right],800,true).ratio,0,'crossing to other answer restarts hold');
-const repeated=armed();
-for(let t=400;t<=1200;t+=100) P.step(repeated,[left],t,true);
-P.step(repeated,[],1250,true);
-assert.ok(!P.step(repeated,[left],1350,true).answer,'brief loss after selection does not rearm');
-assert.equal(repeated.latched,true);
-const feedback=armed();
-assert.match(P.step(feedback,[resized(left,.1)],400,true).status,/too small/);
-assert.match(P.step(feedback,[hand(.98)],500,true).status,/inside a dashed guide/);
-console.log('Passed: smaller upright palms, background rejection, paused dropouts, recovery timeout, boundary jitter, repeat prevention and specific feedback.');
+// Exercise the actual MediaPipe result adapter and frame scheduler with fake camera output.
+const draw={clearRect(){},save(){},restore(){},translate(){},scale(){},drawImage(){},fillRect(){},fillText(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},arc(){},fill(){}};
+const frames=new Map(),timeouts=new Map(),cancelled=[];
+let nextId=1, sends=0, inFlight=0,maxInFlight=0;
+const video={videoWidth:1280,videoHeight:720,
+  requestVideoFrameCallback(fn){const id=nextId++;frames.set(id,fn);return id;},
+  cancelVideoFrameCallback(id){cancelled.push(id);frames.delete(id);}};
+const nodes={camera:video,palmPreview:{width:320,height:180,getContext:()=>draw},palmStatus:{textContent:''}};
+Object.assign(ctx,{$:id=>nodes[id],stream:{},controlMode:()=> 'palms',document:{hidden:false},
+  performance:{now:()=> 1000},phase:'play',round:{answered:false},isPlayBlocked:()=>false,
+  setCharge(){},clearCharge(){},HAND_CONNECTIONS:[],answer:side=>answers.push(side),
+  setTimeout(fn,delay){const id=nextId++;timeouts.set(id,{fn,delay});return id;},clearTimeout(id){timeouts.delete(id);}});
+const answers=[];
+vm.runInContext('palmRequestGeneration=palmGeneration;',ctx);
+ctx.results={multiHandLandmarks:[leftPosition],multiHandedness:[physicalRight],image:{}};
+vm.runInContext('handlePalmResults(results);',ctx);
+assert.deepEqual(answers,['right'],'result adapter uses handedness rather than position or saved duration');
+vm.runInContext('handlePalmResults(results);',ctx);
+assert.equal(answers.length,1);
+ctx.results={multiHandLandmarks:[],multiHandedness:[],image:{}};
+vm.runInContext('handlePalmResults(results);',ctx);
+ctx.results={multiHandLandmarks:[rightPosition],multiHandedness:[physicalLeft],image:{}};
+vm.runInContext('handlePalmResults(results);',ctx);
+assert.deepEqual(answers,['right','left']);
+vm.runInContext('palmRequestGeneration=palmGeneration-1;handlePalmResults(results);',ctx);
+assert.equal(answers.length,2,'stale camera-generation output is ignored');
+ctx.fakeEngine={async send(){sends++;inFlight++;maxInFlight=Math.max(maxInFlight,inFlight);await Promise.resolve();inFlight--;}};
+(async()=>{
+  vm.runInContext('palmEngine=fakeEngine;schedulePalmTick();schedulePalmTick();',ctx);
+  assert.equal(frames.size,1,'one pending camera-frame callback');
+  assert.equal(timeouts.size,0,'no inference throttle');
+  const [id,fn]=[...frames][0];frames.delete(id);await fn();
+  assert.equal(sends,1);assert.equal(maxInFlight,1);
+  assert.equal(frames.size,1,'ready for the very next fresh video frame');
+  vm.runInContext('stopPalmLoop();',ctx);
+  assert.equal(frames.size,0,'stopping camera cancels pending video callback');
+  assert.equal(cancelled.length,1);
+  delete video.requestVideoFrameCallback;
+  vm.runInContext('schedulePalmTick();',ctx);
+  assert.equal([...timeouts.values()][0].delay,0,'fallback has no added delay');
+  vm.runInContext('stopPalmLoop();',ctx);
+  assert.equal(timeouts.size,0,'fallback callback is cancelled too');
+  console.log('Passed: result-to-answer wiring, stale-result rejection, fresh-frame scheduling, no artificial inference delay, serialized inference and callback cancellation.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

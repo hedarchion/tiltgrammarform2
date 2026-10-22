@@ -3,13 +3,13 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = readFileSync('index.html', 'utf8');
 const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
-for (const id of ['formSelect','controlModeSelect','palmHold','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle','lbEvery']) {
+for (const id of ['formSelect','controlModeSelect','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle','lbEvery']) {
   assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
   assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
 }
 assert.ok(html.slice(0,html.indexOf('</header>')).includes('id="cameraToggleBtn"'),'camera permission/on-off remains in the game header');
 assert.equal(html.split('id="cameraToggleBtn"').length-1,1,'one shared camera toggle');
-for (const id of ['palmHoldQuick','controlModeBtn','recenterBtn','palmCameraBtn']) assert.ok(!html.includes(`id="${id}"`));
+for (const id of ['palmHold','palmHoldHint','palmHoldQuick','controlModeBtn','recenterBtn','palmCameraBtn']) assert.ok(!html.includes(`id="${id}"`));
 function element(hidden = false) {
   const classes = new Set(hidden ? ['hidden'] : []);
   return {
@@ -27,6 +27,7 @@ const storage = new Map([['grammartilt_v2', JSON.stringify({
     preset: { descriptor: Array(128).fill(0.3), thumb: 'data:photo', facePhoto: 'data:photo' }, descriptor: [1, 2] }] } }
 })]]);
 let cameraCalls = 0, modelLoads = [];
+const documentEvents = new Map();
 const faceapi = { nets: {
   tinyFaceDetector: { async loadFromUri() { modelLoads.push('detector'); } },
   faceLandmark68Net: { async loadFromUri() { modelLoads.push('landmarks'); } },
@@ -37,13 +38,14 @@ const context = vm.createContext({
   navigator: { mediaDevices: { getUserMedia() { cameraCalls++; throw new Error('Camera must stay optional'); } } },
   localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) },
   setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 2; }, clearInterval() {}, requestAnimationFrame() {},
-  document: { hidden: false, activeElement: null, body: element(), addEventListener() {},
+  document: { hidden: false, activeElement: null, body: element(), addEventListener(name, fn) { documentEvents.set(name, fn); },
     getElementById(id) { assert.ok(nodes.has(id), `Missing HTML element ${id}`); return nodes.get(id); },
     querySelectorAll() { return []; }, querySelector(selector) { return selector.startsWith('#') ? nodes.get(selector.slice(1)) : element(); },
     createElement() { return element(); } }
 });
 const run = code => vm.runInContext(code, context);
 run(readFileSync('questions.js', 'utf8'));
+run(readFileSync('questions-form1.js', 'utf8'));
 run(readFileSync('app.js', 'utf8').replace(/init\(\);\s*$/, ''));
 run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos = async () => {}; init();');
 assert.equal(run('QUESTION_BANK.length'), 1000);
@@ -154,6 +156,88 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   await run('startTurn(currentStudents().at(-1));');
   assert.equal(run('phase'),'countdown','saved numbered player returns without face detection');
   assert.equal(run('currentStudents().length'),beforeNumbered+1,'reuses numbered score record');
+  // Active question time affects points, with exact pause/resume boundaries.
+  let now = 0;
+  context.performance.now = () => now;
+  run('stopSession(); createClass("Speed scoring"); startSession(); startNumberedPlayer(); startRound(currentStudents()[0]);');
+  const correctAnswer = 'answer(correctIndex(currentQuestion()) === 0 ? "left" : "right");';
+  const wrongAnswer = 'answer(correctIndex(currentQuestion()) === 0 ? "right" : "left");';
+  now = 2000;
+  run(correctAnswer);
+  assert.equal(run('round.points'), 180, 'two-second answer earns base plus 80 speed points');
+  run(correctAnswer);
+  assert.equal(run('round.responseTimesMs.length'), 1, 'duplicate submissions cannot award points');
+  now = 50000; // Feedback delays do not run the next question clock.
+  run('advanceRound();');
+  now += 1000;
+  run('openTeacher();');
+  now += 20000;
+  run('showLeaderboard({after:"resume"}); closeTeacherPanel();');
+  now += 20000;
+  run(correctAnswer);
+  assert.equal(run('round.answered'), false, 'blocked answers are ignored');
+  run('closeLeaderboard();');
+  now += 1000;
+  run('showLostNow();');
+  now += 20000;
+  run(correctAnswer);
+  assert.equal(run('round.answered'), false, 'face-loss pause blocks submissions');
+  run('hideLost();');
+  now += 1000;
+  context.document.hidden = true;
+  documentEvents.get('visibilitychange')();
+  now += 20000;
+  run(correctAnswer);
+  assert.equal(run('round.answered'), false, 'hidden tabs cannot submit');
+  context.document.hidden = false;
+  documentEvents.get('visibilitychange')();
+  now += 2000;
+  run(correctAnswer);
+  assert.equal(run('round.responseTimesMs[1]'), 5000, 'nested overlays, lost-face pause and hidden tab exclude paused time');
+  assert.equal(run('round.points'), 355, 'five active seconds earn 50 speed points plus base and streak');
+  assert.ok(nodes.get('feedbackLine').textContent.includes('5.0s · +50 SPEED'));
+  run('advanceRound();');
+  now += 10000;
+  run(correctAnswer);
+  assert.equal(run('round.points'), 505, 'ten seconds still earns base and streak points');
+  run('advanceRound();');
+  now += 15000;
+  run(correctAnswer);
+  assert.equal(run('round.points'), 680, 'slow answers keep their correctness and streak points');
+  run('advanceRound();');
+  run(wrongAnswer);
+  assert.equal(run('round.points'), 680, 'instant wrong answers earn no speed points');
+  assert.equal(run('round.streak'), 0);
+  for (let i = 0; i < 3; i++) {
+    run('advanceRound();');
+    now += 5000;
+    run(correctAnswer);
+  }
+  run('advanceRound();');
+  assert.equal(run('round.redemption.active'), true);
+  assert.equal(run('round.questionTimer.elapsedMs'), 0, 'redemption gets a fresh clock');
+  now += 2000;
+  run(correctAnswer);
+  assert.equal(run('round.points'), 1535, 'redemption adds 250 base and 80 speed points');
+  run('finishRound();');
+  assert.equal(run('currentStudents()[0].correctTotal'), 8, 'speed does not change marks');
+  assert.equal(run('currentStudents()[0].totalScore'), 1535);
+  assert.ok(nodes.get('roundSpeedBonus').textContent.includes('+360'));
+  run('DB=loadDB();');
+  assert.equal(run('currentStudents()[0].marks[0].speedBonus'), 360, 'speed bonus persists');
+  assert.deepEqual(Array.from(run('currentStudents()[0].marks[0].responseTimesMs')), [2000,5000,10000,15000,0,5000,5000,5000,2000]);
+  assert.equal(run('DB.history.at(-1).points'), 1535, 'history includes speed points');
+  // Perfect round, identical timing via shared answer path, and missed redemption.
+  run('enterIdle(); startRound(currentStudents()[0]);');
+  for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
+  assert.equal(run('round.points'), 2600, 'perfect bonus and all streak points remain alongside speed');
+  run('enterIdle(); startRound(currentStudents()[0]);');
+  for (let i = 0; i < 8; i++) run(`${i === 0 ? wrongAnswer : correctAnswer} advanceRound();`);
+  const beforeMissedRedemption = run('round.points');
+  run(wrongAnswer);
+  assert.equal(run('round.points'), beforeMissedRedemption, 'missed redemption earns no bonus');
+  context.performance.now = () => 1000;
+  console.log('Passed: timed scoring, pause/resume, wrong and duplicate answers, speed persistence, redemption and perfect bonuses.');
   // Automatic board cadence counts completed turns; a manual view does not consume them.
   run('session=null; createClass("Podium test"); DB.settings.lbEvery=3; DB.settings.music=false; DB.settings.sfx=false; session={active:true,rounds:0,roundsSinceBoard:0,classId:DB.activeClass,questionDeck:shuffledQuestions()};');
   run('getCurrentClass().students=[normalizeStudent({id:"gold",numbered:true}),normalizeStudent({id:"silver",numbered:true}),normalizeStudent({id:"bronze",numbered:true}),normalizeStudent({id:"new",numbered:true,totalScore:9999})];');
@@ -188,6 +272,55 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   context.matchMedia=()=>({matches:true});
   run('animatePodium();');
   assert.equal(animations.length,2,'reduced motion skips rank movement');
+  // Personal play starts directly, preserves class data and waits at results.
+  run('abortSession();');
+  const classIdBeforeSolo = run('DB.activeClass');
+  const classBeforeSolo = run('JSON.stringify(getCurrentClass())');
+  const cameraCallsBeforeSolo = cameraCalls;
+  run('changePlayMode("single"); changeDifficulty("challenge"); startSession();');
+  assert.equal(run('phase'), 'countdown', 'solo skips player enrollment');
+  assert.equal(cameraCalls, cameraCallsBeforeSolo, 'solo does not request a camera');
+  assert.equal(run('currentStudents().length'), 1, 'one personal profile');
+  assert.equal(run('getCurrentClass().id'), 'solo');
+  assert.equal(run('DB.activeClass'), classIdBeforeSolo, 'remember selected class');
+  assert.equal(nodes.get('difficultySelect').disabled, true, 'difficulty is locked during a session');
+  run('changeDifficulty("easy"); changePlayMode("class");');
+  assert.equal(run('isSolo()'), true, 'mode is locked during a session');
+  assert.equal(run('selectedDifficulty()'), 'challenge');
+  run('startRound(currentStudents()[0]);');
+  assert.ok(run('round.qs.every(q => DIFFICULTY_TOPICS[2].challenge.includes(q.topic))'), 'solo uses selected difficulty');
+  for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
+  assert.equal(run('phase'), 'round');
+  assert.equal(nodes.get('nextPlayerBtn').textContent, 'PLAY AGAIN');
+  assert.equal(nodes.get('roundAutoHint').classList.contains('hidden'), true, 'solo has no next-player timer');
+  assert.equal(run('boardDue()'), false, 'solo never triggers a class podium');
+  assert.equal(run('DB.history.at(-1).classId'), 'solo', 'personal history stays separate');
+  assert.equal(run('DB.history.at(-1).difficulty'), 'challenge');
+  assert.equal(run('DB.history.at(-1).form'), 2);
+  const soloId = run('currentStudents()[0].id');
+  const soloUsed = Array.from(run('getCurrentClass().usedQuestionIds'));
+  run('nextPlayer();');
+  assert.equal(run('phase'), 'countdown', 'play again starts same player directly');
+  assert.equal(run('currentStudents()[0].id'), soloId);
+  run('startRound(currentStudents()[0]);');
+  assert.ok(run(`round.qs.every(q => !${JSON.stringify(soloUsed)}.includes(q.id))`), 'replay never repeats used questions');
+  run('round.results=Array(8).fill("wrong"); finishRound(); closeRoundToLeaderboard();');
+  assert.equal(run('phase'), 'lobby', 'back to menu ends solo');
+  assert.equal(nodes.get('leaderboardOverlay').classList.contains('hidden'), true);
+  const soloScore = run('currentStudents()[0].totalScore');
+  run('DB=loadDB();');
+  assert.equal(run('isSolo()'), true, 'selected mode survives reload');
+  assert.equal(run('currentStudents()[0].totalScore'), soloScore, 'personal score persists');
+  assert.equal(run('currentStudents()[0].games'), 2);
+  assert.equal(run('selectedDifficulty()'), 'challenge');
+  run('changePlayMode("class");');
+  assert.equal(run('JSON.stringify(getCurrentClass())'), classBeforeSolo, 'solo leaves class scores and questions untouched');
+  assert.equal(nodes.get('nextPlayerBtn').textContent, 'NEXT PLAYER');
+  run('changePlayMode("single"); changeDifficulty("easy");');
+  assert.equal(run('selectedDifficulty()'), 'easy');
+  run('changePlayMode("class");');
+  assert.equal(run('selectedDifficulty()'), 'standard', 'difficulty is saved independently for class and solo');
+  console.log('Passed: direct solo start, replay, persistent personal progress, class isolation, mode/difficulty locks and solo menu flow.');
   await Promise.resolve();
   assert.deepEqual(modelLoads, ['detector', 'landmarks', 'recognition']);
   console.log('Passed: three-turn leaderboard cadence, manual view counter, rank persistence, attached character bodies, promotion/demotion and reduced motion.');

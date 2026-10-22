@@ -6,7 +6,48 @@ const MODEL_URL = "models";
 const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
 const FORM1_BANK = Array.isArray(window.BANK_FORM1) ? window.BANK_FORM1 : [];
 function selectedForm(cls = getCurrentClass()) { return (cls ? cls.form : DB.defaultForm) === 1 ? 1 : 2; }
-function selectedBank(cls = getCurrentClass()) { return selectedForm(cls) === 1 ? FORM1_BANK : QUESTION_BANK; }
+const DIFFICULTIES = {
+  easy: { label: "Easy", description: "Core topics: present tenses, articles, plurals and quantities." },
+  standard: { label: "Standard", description: "A balanced mix of every topic in your grammar level." },
+  challenge: { label: "Challenge", description: "Past tenses and comparisons in Form 1; more complex structures in Form 2." }
+};
+const DIFFICULTY_TOPICS = {
+  1: {
+    easy: ["Present Simple", "Present Continuous", "Articles", "Countable Nouns", "Much and Many", "Some and Any"],
+    challenge: ["Past Simple", "Past Continuous", "Comparatives", "Superlatives"]
+  },
+  2: {
+    easy: ["Present Simple", "Present Continuous", "Articles", "Countable Nouns", "Quantifiers", "Subject–Verb Agreement"],
+    challenge: ["Passive Voice", "Question Tags", "Conjunctions", "Adjectives -ed / -ing", "Pronouns", "Uncountable Nouns"]
+  }
+};
+function selectedDifficulty(cls = getCurrentClass()) {
+  const value = cls ? cls.difficulty : DB.defaultDifficulty;
+  return Object.hasOwn(DIFFICULTIES, value) ? value : "standard";
+}
+function selectedBank(cls = getCurrentClass()) {
+  const form = selectedForm(cls);
+  const bank = form === 1 ? FORM1_BANK : QUESTION_BANK;
+  const topics = DIFFICULTY_TOPICS[form][selectedDifficulty(cls)];
+  return topics ? bank.filter(question => topics.includes(question.topic)) : bank;
+}
+function changeDifficulty(value) {
+  if (session?.active || !Object.hasOwn(DIFFICULTIES, value)) return;
+  const cls = getCurrentClass(), target = cls || DB;
+  const key = cls ? "difficulty" : "defaultDifficulty", previous = target[key];
+  target[key] = value;
+  if (!saveDB()) target[key] = previous;
+  refreshAll();
+}
+function isSolo() { return DB.playMode === "single"; }
+function changePlayMode(value) {
+  if (session?.active || !["class", "single"].includes(value)) return;
+  const previous = DB.playMode;
+  DB.playMode = value;
+  if (!saveDB()) DB.playMode = previous;
+  resetFaceIdentity();
+  showLobby();
+}
 function changeForm(value) {
   const cls = getCurrentClass();
   if (session?.active) return;
@@ -16,16 +57,6 @@ function changeForm(value) {
   target[key] = Number(value) === 1 ? 1 : 2;
   if (!saveDB()) target[key] = previous;
   refreshAll();
-}
-const PALM_HOLD_DURATIONS = [400, 600, 800, 1000, 1500, 2000, 3000];
-function setPalmHoldMs(value) {
-  const duration = Number(value);
-  if (!PALM_HOLD_DURATIONS.includes(duration)) return;
-  const previous = DB.settings.palmHoldMs;
-  DB.settings.palmHoldMs = duration;
-  if (!saveDB()) DB.settings.palmHoldMs = previous;
-  if (typeof resetPalm === "function") resetPalm();
-  renderSettings();
 }
 function controlMode() { return DB.settings.controlMode || "palms"; }
 function setControlMode(value) {
@@ -38,7 +69,7 @@ function setControlMode(value) {
   saveDB();
   renderControlMode();
   if (phase === "play" && round && !round.answered) {
-    $("feedbackLine").textContent = mode === "palms" ? "Hold one open palm in a guide, or tap an answer."
+    $("feedbackLine").textContent = mode === "palms" ? "Raise your left or right open palm to answer instantly, or tap."
       : mode === "tilt" && stream ? "Tilt left or right and hold." : "Tap an answer or use the left and right arrow keys.";
   }
   if (mode === "palms" && stream) ensurePalmLoop();
@@ -54,6 +85,8 @@ const TRACKING_FRESH_MS = 450;
 const NEUTRAL_HOLD_MS = 180;
 const FACE_LOST_MS = 5000;
 const QUESTIONS_PER_ROUND = 8;
+const SPEED_BONUS_MAX = 100;
+const SPEED_BONUS_WINDOW_MS = 10000;
 const PRAISE = ["NICE!", "CLEAN!", "LOCKED IN!", "SHARP!", "YES!", "BOOM!"];
 const CONFETTI_COLORS = ["#7cffcb", "#ffd166", "#7aa2ff", "#ff4d67", "#ffffff", "#b28dff"];
 const MELODY = [659, 0, 784, 0, 988, 0, 784, 0, 659, 0, 523, 0, 587, 0, 659, 0];
@@ -95,7 +128,7 @@ function studentById(id) {
 }
 
 function getCurrentClass() {
-  return DB.activeClass ? DB.classes[DB.activeClass] || null : null;
+  return isSolo() ? DB.solo : DB.activeClass ? DB.classes[DB.activeClass] || null : null;
 }
 
 function currentStudents() {
@@ -122,7 +155,6 @@ function compareStudents(a, b) {
 
 const defaultSettings = {
   controlMode: "palms",
-  palmHoldMs: 800,
   sfx: true,
   music: true,
   lbEvery: 3,
@@ -158,7 +190,14 @@ function normalizeStudent(raw) {
 
 function normalizeDB(raw) {
   const db = {
-    version: 5,
+    version: 6,
+    playMode: raw?.playMode === "single" ? "single" : "class",
+    defaultDifficulty: Object.hasOwn(DIFFICULTIES, raw?.defaultDifficulty) ? raw.defaultDifficulty : "standard",
+    solo: { id: "solo", name: "Single player", form: raw?.solo?.form === 1 ? 1 : 2,
+      difficulty: Object.hasOwn(DIFFICULTIES, raw?.solo?.difficulty) ? raw.solo.difficulty : "standard",
+      students: [normalizeStudent(raw?.solo?.students?.[0] || { numbered: true })],
+      usedQuestionIds: Array.isArray(raw?.solo?.usedQuestionIds)
+        ? [...new Set(raw.solo.usedQuestionIds.filter(id => typeof id === "string" && id.length < 100))] : [] },
     defaultForm: raw?.defaultForm === 1 ? 1 : 2,
     activeClass: null,
     classes: {},
@@ -168,7 +207,6 @@ function normalizeDB(raw) {
   };
   if (!raw || typeof raw !== "object") return db;
   if (raw.settings && typeof raw.settings === "object") {
-    db.settings.palmHoldMs = PALM_HOLD_DURATIONS.includes(Number(raw.settings.palmHoldMs)) ? Number(raw.settings.palmHoldMs) : 800;
     db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
     db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
     db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
@@ -185,6 +223,7 @@ function normalizeDB(raw) {
         id,
         name: cleanName(value.name, 40) || "Class",
         form: value.form === 1 ? 1 : 2,
+        difficulty: Object.hasOwn(DIFFICULTIES, value.difficulty) ? value.difficulty : "standard",
         createdAt: Number(value.createdAt) || Date.now(),
         students,
         leaderboardRanks: value.leaderboardRanks && typeof value.leaderboardRanks === "object"
@@ -299,6 +338,24 @@ function isPlayBlocked() {
     || !$("leaderboardOverlay").classList.contains("hidden")
     || !$("roundOverlay").classList.contains("hidden")
     || !$("countdownOverlay").classList.contains("hidden");
+}
+
+function speedBonusFor(elapsedMs) {
+  return Math.round(SPEED_BONUS_MAX * (1 - clamp(elapsedMs / SPEED_BONUS_WINDOW_MS, 0, 1)));
+}
+
+function pauseQuestionTimer() {
+  const timer = round?.questionTimer;
+  if (!timer || timer.startedAt === null) return;
+  timer.elapsedMs += Math.max(0, performance.now() - timer.startedAt);
+  timer.startedAt = null;
+}
+
+function resumeQuestionTimer() {
+  const timer = round?.questionTimer;
+  if (!timer || timer.startedAt !== null || phase !== "play" || round.answered
+    || document.hidden || isPlayBlocked() || lostShown) return;
+  timer.startedAt = performance.now();
 }
 
 function ensureAudio() {
@@ -510,7 +567,7 @@ function setHudStudent(student, label) {
 
 function setHudClass() {
   const cls = getCurrentClass();
-  $("hudClass").textContent = cls ? cls.name.toUpperCase() : "NO CLASS";
+  $("hudClass").textContent = cls ? `${cls.name.toUpperCase()} · ${DIFFICULTIES[selectedDifficulty()].label.toUpperCase()}` : "NO CLASS";
 }
 
 function updateSessionHud() {
@@ -523,7 +580,8 @@ function updateSessionHud() {
       ? `ROUND ${session.rounds + 1}`
       : `ROUNDS ${session.rounds}`;
   }
-  $("classSelect").disabled = active;
+  $("classSelect").disabled = active || isSolo();
+  ["classModeBtn", "singleModeBtn", "difficultySelect", "lobbyDifficulty"].forEach(id => { $(id).disabled = active; });
   $("formSelect").disabled = active;
   $("newClassBtn").disabled = active;
   $("createClassBtn").disabled = active;
@@ -544,6 +602,8 @@ function showScreen(name) {
   ["lobby", "idle", "play"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== name);
   });
+  window.scrollTo?.(0, 0);
+  $("lobby").parentElement?.scrollTo?.(0, 0);
 }
 
 function hideOverlay(id) {
@@ -561,6 +621,7 @@ function hideLeaderboard() {
   boardRevision += 1;
   hideOverlay("leaderboardOverlay");
   boardContext = null;
+  resumeQuestionTimer();
 }
 
 function setCameraUI() {
@@ -571,8 +632,8 @@ function setCameraUI() {
   $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
   $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
   $("calibrateBtn").disabled = !live;
-  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
-  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";
+  $("optionLeft").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "◀ LEFT HAND" : controlMode() === "tilt" && live ? "◀ TILT LEFT" : "◀ TAP OR PRESS ←";
+  $("optionRight").querySelector(".option-tag").textContent = controlMode() === "palms" && live ? "RIGHT HAND ▶" : controlMode() === "tilt" && live ? "TILT RIGHT ▶" : "TAP OR PRESS → ▶";
   $("camDot").title = live ? "Camera live" : "Camera off";
   $("cameraNote").textContent = live
     ? "Camera ready for palm control. Photo cards are optional and stay on this device."
@@ -839,6 +900,7 @@ function maybeShowLost() {
   if (controlMode() !== "tilt" || !stream || Date.now() < lostContinueUntil) return;
   const lastSeen = detection.face ? Date.now() : round.lastSeen || 0;
   if (!detection.face && Date.now() - lastSeen > FACE_LOST_MS && !lostShown) {
+    pauseQuestionTimer();
     lostShown = true;
     $("lostSub").textContent = "Your round is paused. The camera will pick you up again.";
     $("playerLost").classList.remove("hidden");
@@ -848,6 +910,7 @@ function maybeShowLost() {
 
 function showLostNow() {
   if (lostShown) return;
+  pauseQuestionTimer();
   lostShown = true;
   $("playerLost").classList.remove("hidden");
   sfx.lost();
@@ -857,6 +920,7 @@ function hideLost() {
   if (!lostShown && $("playerLost").classList.contains("hidden")) return;
   lostShown = false;
   hideOverlay("playerLost");
+  resumeQuestionTimer();
 }
 
 function descriptorDistance(a, b) {
@@ -939,7 +1003,7 @@ async function indexSavedFacePhotos() {
         const result = await faceapi.detectSingleFace(image,
           new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
           .withFaceLandmarks().withFaceDescriptor();
-        if (result && DB.classes[cls.id]?.students.includes(student)) {
+        if (result && (cls.id === "solo" ? DB.solo : DB.classes[cls.id])?.students.includes(student)) {
           learnFaceSample(student, Array.from(result.descriptor));
           saveDB();
         }
@@ -962,7 +1026,7 @@ function confirmFacePlayer(studentId) {
 }
 
 function completeFaceTurn(student, capture) {
-  if (!session?.active || phase !== "idle" || capture.classId !== DB.activeClass) return;
+  if (!session?.active || phase !== "idle" || capture.classId !== getCurrentClass()?.id) return;
   if (!student) student = addPhotoPlayer(capture.photo);
   if (!student) return;
   if (!student.photo) student.photo = capture.photo;
@@ -1010,6 +1074,21 @@ function drawPlayerPreview() {
 
 function renderLobby() {
   const cls = getCurrentClass();
+  document.body.classList.toggle("single-player", isSolo());
+  $("classModeBtn").setAttribute("aria-pressed", String(!isSolo()));
+  $("singleModeBtn").setAttribute("aria-pressed", String(isSolo()));
+  $("lobbyModeLabel").textContent = isSolo() ? "YOUR PRACTICE" : "TODAY'S CLASS";
+  $("scoreRule").innerHTML = `<span>★</span> ${isSolo() ? "streaks, points &amp; personal progress" : "streaks, points &amp; live ranks"}`;
+  $("startBtn").textContent = isSolo() ? "START SINGLE PLAYER" : "START CLASS GAME";
+  $("manageBtn").textContent = isSolo() ? "GAME SETTINGS" : "SET UP CLASS";
+  $("nextPlayerBtn").textContent = isSolo() ? "PLAY AGAIN" : "NEXT PLAYER";
+  $("roundLeaderboardBtn").textContent = isSolo() ? "BACK TO MENU" : "LEADERBOARD";
+  $("roundAutoHint").classList.toggle("hidden", isSolo());
+  $("difficultySelect").value = selectedDifficulty();
+  $("lobbyDifficulty").value = selectedDifficulty();
+  $("difficultyNote").textContent = DIFFICULTIES[selectedDifficulty()].description;
+  $("lobbyDifficultyNote").textContent = DIFFICULTIES[selectedDifficulty()].description;
+  $("drawerTitle").textContent = isSolo() ? "Your game" : "Run the class";
   $("formSelect").value = String(selectedForm());
   $("formSelect").disabled = Boolean(session?.active);
   $("lobbyClassName").textContent = cls ? cls.name : "No class yet";
@@ -1031,12 +1110,15 @@ function renderLobby() {
   $("lobbyTop").innerHTML = top.length
     ? top.map((student) => `<div class="mini-rank-row">${avatarHTML(student)}<b>${student.totalScore || 0} PTS</b></div>`).join("")
     : '<div class="drawer-meta">Marks will appear here after the first round.</div>';
-  $("lobbyStatus").textContent = !cls
+  $("lobbyStatus").textContent = isSolo()
+    ? `Your progress stays on this device · ${cls.students[0].games} ${cls.students[0].games === 1 ? "round" : "rounds"} played · ${cls.students[0].totalScore} points`
+    : !cls
     ? "Create a class to begin."
     : `${cls.students.length} saved players · ${unusedQuestionCount()} of ${selectedBank().length} Form ${selectedForm()} questions unused · class progress saved`;
   $("startBtn").disabled = !cls;
   const classPasses = Math.floor(unusedQuestionCount() / (30 * (QUESTIONS_PER_ROUND + 1)));
-  $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused questions · ${new Set(selectedBank().map(q => q.topic)).size} Form ${selectedForm()} topics · ${classPasses} full rounds for 30 players, including redemption`;
+  $("questionBankInfo").textContent = `${unusedQuestionCount().toLocaleString()} unused ${DIFFICULTIES[selectedDifficulty()].label.toLowerCase()} questions · ${new Set(selectedBank().map(q => q.topic)).size} Form ${selectedForm()} topics`
+    + (isSolo() ? " · personal question history" : ` · ${classPasses} full rounds for 30 players, including redemption`);
 }
 
 function renderIdleRanks() {
@@ -1094,8 +1176,6 @@ function renderTeacherMeta() {
 }
 
 function renderSettings() {
-  $("palmHold").value = String(DB.settings.palmHoldMs);
-  $("palmHoldHint").textContent = `Hold ${DB.settings.palmHoldMs / 1000}s · lower hand to reset`;
   $("tiltSensitivity").value = String(DB.settings.tiltThreshold);
   $("tiltHold").value = String(DB.settings.tiltHoldMs);
   $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
@@ -1119,13 +1199,13 @@ function refreshAll() {
 }
 
 function createClass(name) {
-  if (session?.active) return null;
+  if (session?.active || isSolo()) return null;
   const clean = cleanName(name, 40);
   if (!clean) {
     toast("Give the class a name first.", "warn");
     return null;
   }
-  const cls = { id: makeId("class"), name: clean, form: selectedForm(), createdAt: Date.now(), students: [], usedQuestionIds: [] };
+  const cls = { id: makeId("class"), name: clean, form: selectedForm(), difficulty: selectedDifficulty(), createdAt: Date.now(), students: [], usedQuestionIds: [] };
   DB.classes[cls.id] = cls;
   DB.activeClass = cls.id;
   saveDB();
@@ -1146,7 +1226,7 @@ function addPhotoPlayer(photo) {
 
 function deleteStudent(studentId) {
   const cls = getCurrentClass();
-  if (!cls) return;
+  if (!cls || isSolo()) return;
   const student = studentById(studentId);
   if (!student) return;
   if (!window.confirm("Remove this player’s photo and saved scores?")) return;
@@ -1163,7 +1243,7 @@ function deleteStudent(studentId) {
 function resetMarks() {
   const cls = getCurrentClass();
   if (!cls) return;
-  if (!window.confirm("Reset every player's marks in this class? Player photos stay.")) return;
+  if (!window.confirm(isSolo() ? "Reset your single-player scores? Used-question history stays." : "Reset every player's marks in this class? Player photos stay.")) return;
   cls.students.forEach((student) => {
     student.totalScore = 0;
     student.bestStreak = 0;
@@ -1182,7 +1262,7 @@ function resetMarks() {
 
 function deleteClass() {
   const cls = getCurrentClass();
-  if (!cls) return;
+  if (!cls || isSolo()) return;
   if (!window.confirm(`Delete ${cls.name}, its players and marks?`)) return;
   if (session?.active) abortSession();
   delete DB.classes[cls.id];
@@ -1215,7 +1295,7 @@ function startSession() {
     return;
   }
   if (unusedQuestionCount() < QUESTIONS_PER_ROUND) {
-    toast("Fewer than 8 unused questions remain for this class. Add new questions to continue without repeats.", "warn", 6000);
+    toast("Fewer than 8 unused questions remain at this difficulty. Choose another difficulty or grammar level, or add new questions.", "warn", 6000);
     return;
   }
   if (!selectedBank().length) {
@@ -1243,7 +1323,8 @@ function startSession() {
   showScreen("lobby");
   enterIdle();
   sfx.start();
-  toast("Class ready. Start a numbered player, capture a photo, or pick a saved card.", "good", 3200);
+  if (isSolo()) beginPlayer(currentStudents()[0]);
+  else toast("Class ready. Start a numbered player, capture a photo, or pick a saved card.", "good", 3200);
 }
 
 function stopSession() {
@@ -1261,7 +1342,7 @@ function stopSession() {
   hideGameOverlays();
   showLobby();
   updateSessionHud();
-  showLeaderboard({ final: true, after: "lobby", auto: true });
+  if (!isSolo()) showLeaderboard({ final: true, after: "lobby", auto: true });
 }
 
 function enterIdle() {
@@ -1276,7 +1357,7 @@ function enterIdle() {
   lostShown = false;
   hideGameOverlays();
   hideLeaderboard();
-  showScreen("idle");
+  showScreen(isSolo() ? "lobby" : "idle");
   updateSessionHud();
   setHudStudent(null, "Waiting for player");
   setStreak(0);
@@ -1341,7 +1422,7 @@ async function startTurn(existingStudent = null) {
     return;
   }
   try {
-    const capture = { photo: portrait.toDataURL("image/jpeg", 0.8), descriptor: faceIdentity.descriptor, descriptors: faceIdentity.samples.slice(-3).map(sample => sample.descriptor), classId: DB.activeClass };
+    const capture = { photo: portrait.toDataURL("image/jpeg", 0.8), descriptor: faceIdentity.descriptor, descriptors: faceIdentity.samples.slice(-3).map(sample => sample.descriptor), classId: getCurrentClass()?.id };
     if (existingStudent || faceIdentity.match || !currentStudents().length) {
       completeFaceTurn(existingStudent || faceIdentity.match, capture);
     } else askFaceConfirmation(capture);
@@ -1352,6 +1433,7 @@ async function startTurn(existingStudent = null) {
 }
 
 function startNumberedPlayer() {
+  if (isSolo()) return;
   if (!session?.active || phase !== "idle" || isUiBlocking()) return;
   if (unusedQuestionCount() < QUESTIONS_PER_ROUND) { toast("Not enough unused questions for a full round.", "warn"); return; }
   const cls = getCurrentClass();
@@ -1380,7 +1462,7 @@ function beginPlayer(student) {
   lastTrackingAt = 0;
   resetTilt();
   $("countdownHint").textContent = controlMode() === "palms"
-    ? "Lower your hands. Then hold one open palm in a left or right guide."
+    ? "Left hand = left answer. Right hand = right answer. Raise an open palm to answer instantly."
     : controlMode() === "tilt" && stream
     ? "Look straight ahead and hold still to set your centre."
     : "Click an answer or use the left and right arrow keys.";
@@ -1474,8 +1556,9 @@ function pickQuestion(excluded, excludedTopics) {
 function startRound(student) {
   if (!session?.active) return;
   if (unusedQuestionCount() < QUESTIONS_PER_ROUND) {
-    toast("Not enough unused questions remain for a full round. This class’s history has been kept.", "warn", 6000);
-    enterIdle();
+    toast("Not enough unused questions remain for a full round at this difficulty. Question history has been kept.", "warn", 6000);
+    if (isSolo()) stopSession();
+    else enterIdle();
     return;
   }
   const questions = [];
@@ -1490,7 +1573,8 @@ function startRound(student) {
   }
   if (questions.length !== QUESTIONS_PER_ROUND) {
     toast("Not enough questions to start a full round.", "bad");
-    enterIdle();
+    if (isSolo()) stopSession();
+    else enterIdle();
     return;
   }
   phase = "play";
@@ -1503,6 +1587,8 @@ function startRound(student) {
     correct: 0,
     wrong: 0,
     points: 0,
+    speedBonus: 0,
+    responseTimesMs: [],
     streak: 0,
     best: 0,
     redemption: { active: false, q: null, won: false },
@@ -1537,7 +1623,7 @@ function renderQuestion() {
   $("feedbackLine").className = "feedback-line";
   $("feedbackLine").textContent = redemption
     ? "One error this round. Make this shot count."
-    : controlMode() === "palms" ? "Hold one open palm in a guide, or tap an answer." : controlMode() === "tilt" && stream ? "Tilt left or right and hold." : "Click an answer or use the left and right arrow keys.";
+    : controlMode() === "palms" ? "Raise your left or right open palm to answer instantly, or tap." : controlMode() === "tilt" && stream ? "Tilt left or right and hold." : "Click an answer or use the left and right arrow keys.";
   $("tiltCaption").textContent = "CENTRE YOUR HEAD";
   $("play").classList.remove("tilting-left", "tilting-right");
   ["optionLeft", "optionRight"].forEach((id) => {
@@ -1553,6 +1639,8 @@ function renderQuestion() {
   tilt = { armed: false, side: null, since: 0 };
   renderProgress();
   setStreak(round.streak);
+  round.questionTimer = { elapsedMs: 0, startedAt: null };
+  resumeQuestionTimer();
 }
 
 function sentenceMarkup(question) {
@@ -1690,9 +1778,12 @@ function updateTilt(now) {
 
 function answer(side) {
   if (phase !== "play" || !round || round.answered) return;
-  if (isPlayBlocked()) return;
+  if (isPlayBlocked() || document.hidden || lostShown) return;
   const question = currentQuestion();
   if (!question) return;
+  pauseQuestionTimer();
+  const elapsedMs = Math.round(round.questionTimer.elapsedMs);
+  round.responseTimesMs.push(elapsedMs);
   round.answered = true;
   tilt.armed = false;
   tilt.side = null;
@@ -1701,6 +1792,9 @@ function answer(side) {
   const correct = correctIndex(question);
   const chosen = side === "left" ? 0 : 1;
   const ok = chosen === correct;
+  const speedBonus = ok ? speedBonusFor(elapsedMs) : 0;
+  round.speedBonus += speedBonus;
+  const timingFeedback = `${(elapsedMs / 1000).toFixed(1)}s · +${speedBonus} SPEED`;
   const chosenEl = chosen === 0 ? $("optionLeft") : $("optionRight");
   const correctEl = correct === 0 ? $("optionLeft") : $("optionRight");
   const otherEl = correct === 0 ? $("optionRight") : $("optionLeft");
@@ -1711,12 +1805,13 @@ function answer(side) {
     callout(PRAISE[Math.floor(Math.random() * PRAISE.length)], "good");
     if (round.redemption.active) {
       round.redemption.won = true;
-      round.points += 250;
-      round.pointsThisRound += 250;
+      round.points += 250 + speedBonus;
+      round.pointsThisRound += 250 + speedBonus;
       sfx.redemption();
       confettiBurst(46);
       $("feedbackLine").className = "feedback-line good";
-      $("feedbackLine").textContent = `REDEMPTION WON! ${question.tip || ""}`.trim();
+      $("feedbackLine").textContent = `REDEMPTION WON! · ${timingFeedback}${question.tip ? ` — ${question.tip}` : ""}`;
+      callout(`+${250 + speedBonus}`, "good");
       $("redemptionChip").classList.add("used");
       $("redemptionChip").textContent = "REDEMPTION USED";
       renderProgress();
@@ -1727,7 +1822,7 @@ function answer(side) {
     round.results[round.qi] = "correct";
     round.streak += 1;
     round.best = Math.max(round.best, round.streak);
-    const award = 100 + Math.max(0, round.streak - 1) * 25;
+    const award = 100 + Math.max(0, round.streak - 1) * 25 + speedBonus;
     round.points += award;
     round.pointsThisRound += award;
     sfx.correct();
@@ -1735,7 +1830,7 @@ function answer(side) {
     if (round.streak >= 4) confettiBurst(24);
     callout(`+${award}`, "good");
     $("feedbackLine").className = "feedback-line good";
-    $("feedbackLine").textContent = question.tip ? `CORRECT — ${question.tip}` : "CORRECT!";
+    $("feedbackLine").textContent = `CORRECT · ${timingFeedback}${question.tip ? ` — ${question.tip}` : ""}`;
     renderProgress();
     setStreak(round.streak);
     after(1250, advanceRound);
@@ -1818,18 +1913,28 @@ function finishRound() {
   student.marks = [...(student.marks || []), {
     at: Date.now(),
     gained,
+    form: selectedForm(),
+    difficulty: selectedDifficulty(),
+    mode: isSolo() ? "single" : "class",
     total: QUESTIONS_PER_ROUND,
     points: round.points,
+    speedBonus: round.speedBonus,
+    responseTimesMs: [...round.responseTimesMs],
     best: round.best,
     redemption: round.redemption.active ? (redemptionWon ? "saved" : "missed") : "none"
   }].slice(-40);
   DB.history.push({
     at: Date.now(),
-    classId: DB.activeClass,
+    classId: getCurrentClass()?.id,
     studentId: student.id,
     gained,
+    form: selectedForm(),
+    difficulty: selectedDifficulty(),
+    mode: isSolo() ? "single" : "class",
     total: QUESTIONS_PER_ROUND,
     points: round.points,
+    speedBonus: round.speedBonus,
+    responseTimesMs: [...round.responseTimesMs],
     best: round.best,
     redemption: redemptionWon ? "saved" : round.redemption.active ? "missed" : "none"
   });
@@ -1859,6 +1964,7 @@ function showRoundOverlay(result) {
   $("roundName").textContent = "YOUR RESULT";
   $("roundMarks").textContent = String(result.gained);
   $("roundPoints").textContent = `+${result.points}`;
+  $("roundSpeedBonus").textContent = `Includes +${result.speedBonus} speed points`;
   $("roundStreak").textContent = String(result.best);
   $("roundRetries").textContent = redemptionText;
   const lit = Math.round((result.gained / QUESTIONS_PER_ROUND) * 5);
@@ -1876,6 +1982,7 @@ function showRoundOverlay(result) {
           : "ROUND COMPLETE";
   }
   $("roundOverlay").classList.remove("hidden");
+  if (isSolo()) return;
   $("nextCount").textContent = "9";
   let left = 9;
   const tick = () => {
@@ -1892,12 +1999,18 @@ function showRoundOverlay(result) {
 }
 
 function boardDue() {
-  if (!session?.active) return false;
+  if (isSolo() || !session?.active) return false;
   return session.roundsSinceBoard >= DB.settings.lbEvery;
 }
 
 function nextPlayer() {
   if (phase !== "round") return;
+  if (isSolo()) {
+    enterIdle();
+    if (unusedQuestionCount() >= QUESTIONS_PER_ROUND) beginPlayer(currentStudents()[0]);
+    else { stopSession(); toast("No full round remains at this difficulty. Choose another difficulty or grammar level.", "warn", 6000); }
+    return;
+  }
   const due = boardDue();
   enterIdle();
   if (due) showLeaderboard({ after: "idle", auto: true });
@@ -1905,6 +2018,7 @@ function nextPlayer() {
 
 function closeRoundToLeaderboard() {
   if (phase !== "round") return;
+  if (isSolo()) { stopSession(); return; }
   $("roundOverlay").classList.add("hidden");
   enterIdle();
   showLeaderboard({ after: "idle" });
@@ -1979,6 +2093,8 @@ function animatePodium() {
 }
 
 function showLeaderboard(options) {
+  if (isSolo()) return;
+  pauseQuestionTimer();
   const revision = ++boardRevision;
   const config = options || {};
   const final = Boolean(config.final);
@@ -1989,11 +2105,11 @@ function showLeaderboard(options) {
   }
   hideOverlay("countdownOverlay");
   hideOverlay("roundOverlay");
-  hideOverlay("playerLost");
+  $("leaderboardOverlay").classList.remove("hidden");
+  hideLost();
   $("lbTitle").textContent = final ? "Final class leaderboard" : "Top grammar heroes";
   $("closeLeaderboardBtn").textContent = final || boardContext.after === "lobby" ? "BACK TO CLASS" : "BACK TO GAME";
   $("leaderboardList").innerHTML = leaderboardRows();
-  $("leaderboardOverlay").classList.remove("hidden");
   animatePodium();
   const cls = getCurrentClass();
   if (cls) {
@@ -2031,6 +2147,7 @@ function closeLeaderboard() {
 }
 
 function openTeacher() {
+  pauseQuestionTimer();
   document.body.classList.add("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "false");
   $("drawerScrim").classList.remove("hidden");
@@ -2044,6 +2161,7 @@ function closeTeacherPanel() {
   document.body.classList.remove("teacher-open");
   $("teacherPanel").setAttribute("aria-hidden", "true");
   $("drawerScrim").classList.add("hidden");
+  resumeQuestionTimer();
 }
 
 function frame(now) {
@@ -2084,9 +2202,11 @@ function bindEvents() {
     });
   });
 
+  $("classModeBtn").addEventListener("click", () => changePlayMode("class"));
+  $("singleModeBtn").addEventListener("click", () => changePlayMode("single"));
+  ["difficultySelect", "lobbyDifficulty"].forEach(id => $(id).addEventListener("change", () => changeDifficulty($(id).value)));
   $("startBtn").addEventListener("click", startSession);
   $("numberedPlayerBtn").addEventListener("click", startNumberedPlayer);
-  $("palmHold").addEventListener("change", () => setPalmHoldMs($("palmHold").value));
   $("controlModeSelect").addEventListener("change", () => setControlMode($("controlModeSelect").value));
   $("startSessionBtn").addEventListener("click", startSession);
   $("stopSessionBtn").addEventListener("click", stopSession);
@@ -2129,7 +2249,7 @@ function bindEvents() {
   $("formSelect").addEventListener("change", () => changeForm($("formSelect").value));
   $("classSelect").addEventListener("change", () => {
     resetFaceIdentity();
-    if (session?.active || !DB.classes[$("classSelect").value]) return;
+    if (isSolo() || session?.active || !DB.classes[$("classSelect").value]) return;
     DB.activeClass = $("classSelect").value;
     indexSavedFacePhotos();
     saveDB();
@@ -2201,11 +2321,15 @@ function bindEvents() {
   $("optionRight").addEventListener("click", () => answer("right"));
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      pauseQuestionTimer();
       resetTilt();
       if (typeof resetPalm === "function") resetPalm();
       stopMusic();
     }
-    else if (session?.active) startMusic();
+    else if (session?.active) {
+      resumeQuestionTimer();
+      startMusic();
+    }
   });
 }
 

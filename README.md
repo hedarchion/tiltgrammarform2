@@ -7,6 +7,33 @@ across 10 topics and the original 1,000 Form 2 questions across 20 topics. There
 questions per turn and a redemption question after exactly one error. Thirty
 students can play three turns each: 720 main questions plus up to 90 redemptions.
 
+## Single player and difficulty
+
+Choose **Class mode** or **Single player** on the home screen. Single player starts
+an eight-question turn directly, without a class, enrollment or camera permission.
+It keeps one personal profile, scores and question history separately from classes.
+Results wait for **Play again** or **Back to menu**; there is no player rotation or
+automatic class podium. Switching back restores the selected class and its records.
+Everything stays in this browser on this device.
+
+Choose difficulty on the home screen or in **Settings → Game settings** before
+starting. Both mode and difficulty are locked during a session. Each class and the
+personal profile remember their grammar level and difficulty independently.
+
+- **Easy:** core topics. Form 1 covers present simple/continuous, articles, plurals,
+  some/any and much/many (600 questions). Form 2 covers present simple/continuous,
+  articles, countable nouns, quantifiers and subject–verb agreement (300 questions).
+- **Standard:** all 1,000 questions for the selected form; the existing default.
+- **Challenge:** Form 1 covers past simple/continuous and comparisons (400 questions).
+  Form 2 covers passive voice, question tags, conjunctions, -ed/-ing adjectives,
+  pronouns and uncountable nouns (300 questions).
+
+Difficulty selects a topic mix, with the same eight-question format, controls and
+scoring. Completed turns record their form and difficulty. Used-question history is
+shared across difficulty settings within each class or personal profile, so changing
+difficulty never makes a used question fresh. A smaller pool can run out sooner;
+select another difficulty or form to use its remaining questions.
+
 ## Continue across days
 
 Choose the same class tomorrow. Photos, confirmed face samples, completed-round
@@ -86,16 +113,26 @@ Each topic has five constructions with twenty named contexts. Rebuild using
 ## Classroom controls
 
 Open-palm control is the default; choose buttons/arrow keys or optional head tilt
-under **Teacher → Game settings → Answer controls**. The
-mirrored preview draws hand landmarks and left/right guides. Lower your hand,
-then show one open hand inside a guide for the selected hold duration (0.8 seconds by default). Choose **Teacher → Palm controls** to set 0.4–3 seconds. The setting is
-saved on this device; changing it resets any partial hold. A progress bar confirms
-the hold; lower the hand again to reset. Hand size uses both width and height so narrow upright palms can qualify.
-Small/outside hands get specific guidance, and multiple hands inside the guide block selection.
-Tracking losses up to 220 ms pause progress without counting missing time; longer losses
-reset the hold. A small margin at the centre guide edges reduces jitter.
-This limits accidental input but cannot identify who owns a hand. Keep the active
-player near the camera, and use the large answer buttons whenever tracking struggles.
+under **Settings → Game settings → Answer controls**. Raise your physical left
+hand for the left answer or your right hand for the right answer, anywhere in the
+camera frame. The first detected, sufficiently visible open palm with a left/right
+classification submits immediately. There is no hold duration, confirmation dwell,
+or position guide. Old saved palm-hold durations are discarded during settings
+migration. The mirrored preview shows landmarks and identifies each hand.
+
+Lower or close your hand between answers. One clear frame rearms input immediately;
+a continuously raised palm cannot answer several questions. Palms shown during
+countdown, feedback or blocking overlays must also be lowered or closed. Two open
+palms block selection until only one remains; uncertain hand identity never falls
+back to screen position. Small background hands remain excluded. This cannot
+identify who owns a hand; keep only the active player near the camera.
+
+The bundled legacy MediaPipe Hands model assumes mirrored input when reporting
+handedness. We feed unmirrored video with `selfieMode: false`, then swap its output
+labels to recover physical left/right, as specified in the
+[MediaPipe Hands documentation](https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/hands.md#multi_handedness).
+Inference uses the lite model, detects up to two hands to catch ambiguous input,
+and runs on fresh video frames with no added wait between inference calls.
 
 **New numbered player** starts without a portrait or face recognition. Returning
 numbered players tap their numbered card to keep their score. Photo enrollment
@@ -103,6 +140,22 @@ remains available. Face loss does not pause palm/button play. Hand inference run
 locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
 (Apache 2.0); video is not uploaded. Camera permission is needed only for gestures
 or photo capture. `node tests/palm-control.test.cjs` checks input gating.
+
+## Scoring
+
+Correct answers earn 100 points, plus 25 for each preceding correct answer in the
+current streak, plus a speed bonus: `round(100 × max(0, 1 − seconds / 10))`.
+For example, answering in 2 seconds earns 80 speed points; 5 seconds earns 50;
+10 seconds or longer earns zero. There is no answer deadline or time penalty.
+Timing starts when each question appears and includes gesture detection time. Teacher
+settings, the leaderboard, the hidden browser tab and the face-loss pause stop
+the clock. Feedback and countdown time do not count toward the next question.
+Wrong answers earn no points and reset the streak. A successful redemption earns
+250 points plus the same speed bonus. A perfect main round earns another 300.
+Marks remain out of eight; speed affects arcade points and leaderboard totals.
+Each completed turn saves its speed bonus and per-question answer times locally,
+and the result screen shows the speed points included in the total. Existing saved
+scores remain unchanged.
 
 ## Podium leaderboard
 
@@ -125,9 +178,9 @@ covers redemption questions. Topic coverage and exact-question non-repetition ar
 preserved. Near exhaustion, the spacing rule relaxes rather than recycling content.
 Existing question IDs and used histories remain unchanged.
 
-Grammar level, answer mode, palm timing, calibration, sound, leaderboard
+Grammar level, answer mode, calibration, sound, leaderboard
 frequency and session controls live in the Teacher Console. The player screen
-keeps large answers, hand tracking feedback and the read-only hold instruction.
+keeps large answers, hand tracking feedback and the instant hand-selection instruction.
 **Enable camera / Stop camera** stays in the game header; enabling it requests
 browser camera permission when needed.
 
@@ -239,16 +292,14 @@ A. Buttons and keyboard
 
 B. Open-palm gestures
 - Process camera frames locally in the browser.
-- Show a mirrored preview with visible hand landmarks and clear left/right selection zones.
-- Hold one open palm in a zone to select that answer.
-- Default hold duration: 0.8 seconds.
-- Teacher-adjustable duration: 0.4–3 seconds.
-- Show visible hold progress.
-- Require the student to lower their hand before another answer can register.
-- Block selection when multiple hands are inside the answer zones.
-- Provide useful guidance for hands that are too small or outside the zones.
-- Brief tracking gaps should pause progress; longer gaps should reset it.
-- Prevent a held gesture from accidentally answering the next question.
+- Show a mirrored preview with visible landmarks and physical left/right hand labels.
+- Left hand selects the left answer; right hand selects the right answer, anywhere in frame.
+- Select on the first recognised open palm, without a hold timer.
+- Correct handedness labels for the model's mirror convention.
+- Require a lower/closed hand before another answer, without a timed release delay.
+- Block selection when two open palms are visible or hand identity is uncertain.
+- Ignore hands too small to identify reliably and show useful guidance.
+- Prevent a continuously raised palm from answering the next question.
 
 C. Optional head tilt
 - Calibrate the neutral head position during the countdown.
@@ -314,7 +365,7 @@ Put teacher controls in a side drawer:
 - Select answer mode
 - Start and stop sessions
 - Set leaderboard frequency
-- Adjust palm and tilt settings
+- Explain instant palm selection and adjust tilt settings
 - Recalibrate tracking
 - Toggle music and sound effects
 - Reset scores
