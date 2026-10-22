@@ -253,3 +253,33 @@
   .round-stats span { font-size:9px; }
   #roundSpeedBonus { margin-block:10px; font-size:11px; }
 }
+
+/* Lite keeps its simple materials while the home screen adapts to a desktop. */
+@media (min-width:1101px) {
+  body.theme-lite:not(.in-session) .stage { min-height:calc(100svh - 68px); display:grid; align-items:center; }
+  .lobby {
+    width:min(1120px,100%);
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-content:start;
+    gap:20px 24px;
+    padding:12px 0;
+  }
+  .lobby .logo-wrap { grid-column:1; grid-row:1; padding:0; align-self:center; }
+  body.theme-lite .lobby .logo { font-size:clamp(30px,3.4vw,48px); line-height:1.25; margin:0; }
+  .lobby .game-modes { grid-column:1; grid-row:2; width:min(620px,100%); }
+  .lobby .appearance-picker { grid-column:2; grid-row:1/3; align-self:end; }
+  .lobby .lobby-grid {
+    grid-column:1/-1;
+    grid-row:3;
+    grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);
+    align-items:start;
+    gap:20px;
+  }
+  .lobby .panel { padding:26px; }
+  .lobby .lobby-class-name { font-size:32px; overflow-wrap:anywhere; }
+  .lobby .lobby-roster { max-height:144px; flex-wrap:wrap; margin-block:16px 0; }
+  .lobby .lobby-actions { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); }
+  .lobby .lobby-side { background:var(--mobile-surface); }
+  .lobby .developer-credit { grid-column:1/-1; grid-row:4; padding:0; }
+}

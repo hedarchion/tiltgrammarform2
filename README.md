@@ -71,6 +71,13 @@ input. Results and ranks wait for a gesture or tap while palm navigation is acti
 Every result waits for an explicit replay, next-player or Stop choice.
 The cues use one small local SVG, with no new image or model dependencies.
 
+## Desktop Lite layout
+
+Above 1,100 pixels, the Lite home screen uses a wider two-column layout, with setup
+and play controls alongside instructions and scores. The title and mode controls
+are sized for the available space; primary actions sit side by side. Lite retains
+solid surfaces and does not load the decorative Glass renderer.
+
 ## Phone and tablet layout
 
 Lite uses a solid, high-contrast interface with a compact header,
