@@ -1297,9 +1297,23 @@ body .resume-confirm-card { width:min(400px,100%); max-width:400px; }
 }
 .play.golden-question .sentence-card p { color: #3b2500; }
 .play.bonus-question .sentence-card {
-  border-color: #b7ffe2;
-  background: linear-gradient(165deg, rgba(219, 255, 240, .9) 0%, rgba(160, 255, 218, .58) 55%, rgba(226, 255, 244, .82) 100%);
-  box-shadow: 0 0 0 3px rgba(124,255,203,.2), 0 24px 70px rgba(2,8,30,.35), inset 0 1px 1px rgba(255,255,255,.9);
+  border-color: #f2c15d;
+  background: linear-gradient(165deg, #30230f, #101723 72%);
+  box-shadow: 0 0 0 3px rgba(242,193,93,.2), 0 24px 70px rgba(2,8,30,.35), inset 0 1px 1px rgba(255,255,255,.28);
+}
+.play.bonus-question #sentence,
+.play.bonus-question #sentence .error-word,
+.play.bonus-question #sentence .blank-slot {
+  color: transparent;
+  background: linear-gradient(108deg, #7a4a08 0%, #f2c15d 18%, #fff4b8 24%, #b87014 36%, #f6d66d 51%, #8e560b 68%, #fff0a2 76%, #c98218 100%) 0 0 / 230% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 0 rgba(255,244,184,.28), 0 9px 20px rgba(0,0,0,.36);
+  animation: fx-foil 3.1s ease-in-out infinite;
+}
+.play.bonus-question #sentence .error-word {
+  text-decoration-color: #ff9b67;
 }
 
 .question-enter .sentence-card { animation: question-in .28s cubic-bezier(.2,.9,.3,1) both; }

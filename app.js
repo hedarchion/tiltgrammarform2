@@ -1075,10 +1075,10 @@ function setCameraUI() {
   const live = Boolean(stream);
   document.body.classList.toggle("camera-on", live);
   document.body.classList.toggle("camera-off", !live);
-  $("cameraToggleBtn").textContent = live ? "Camera on" : "Camera";
-  $("cameraToggleBtn").setAttribute("aria-label", live ? "Stop camera" : "Enable camera");
+  $("cameraToggleBtn").textContent = live ? "Camera on" : controlMode() === "palms" ? "Enable palms" : "Camera";
+  $("cameraToggleBtn").setAttribute("aria-label", live ? "Stop camera" : controlMode() === "palms" ? "Enable camera for palm navigation" : "Enable camera");
   $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
-  $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
+  $("cameraToggleBtn").title = live ? "Turn camera off" : controlMode() === "palms" ? "Turn camera on for palm navigation" : "Turn camera on and allow permission";
   for (const [id, side] of [["optionLeft", "left"], ["optionRight", "right"]]) {
     const tag = $(id).querySelector(".option-tag");
     if (controlMode() === "palms") tag.innerHTML = palmCue(side);
