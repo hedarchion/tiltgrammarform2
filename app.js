@@ -4,7 +4,8 @@ const $ = (id) => document.getElementById(id);
 // Layout and effects follow the selected UI; input and scoring stay independent.
 function mobileDevice() { return Boolean(window.matchMedia?.("(max-width: 1100px), (pointer: coarse)").matches); }
 function compactView() { return selectedAppearance() === "lite" || mobileDevice(); }
-function quietEffects() { return selectedAppearance() === "lite" || Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
+function reducedMotion() { return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); }
+function liteEffects() { return selectedAppearance() === "lite"; }
 let renderedAppearance = null;
 function appearanceKey() {
   return mobileDevice() ? (isSolo() ? "mobileSoloAppearance" : "mobileClassAppearance")
@@ -146,6 +147,7 @@ function palmControlContext() {
     || !$("playerLost").classList.contains("hidden")) return null;
   if (pendingFaceResume && !$("resumeConfirmModal").classList.contains("hidden")) return "face-resume";
   if (!$("leaderboardOverlay").classList.contains("hidden")) return "leaderboard";
+  if (!$("bonusOverlay").classList.contains("hidden")) return "bonus";
   if (phase === "round" && !$("roundOverlay").classList.contains("hidden")) return "round";
   if (phase === "countdown") return "countdown";
   if (phase === "play" && round && !isPlayBlocked()) return "play";
@@ -157,6 +159,7 @@ function palmControlTarget(side, context = palmControlContext()) {
   if (!["left", "right"].includes(side)) return null;
   let target = null;
   if (context === "face-resume") target = side === "left" ? "resumeConfirmNo" : "resumeConfirmYes";
+  else if (context === "bonus") target = side === "left" ? "bonusDeclineBtn" : "bonusShotBtn";
   else if (context === "play" && !round?.answered) target = side === "left" ? "optionLeft" : "optionRight";
   else if (context === "round") target = side === "left" ? "replayPlayerBtn" : "nextPlayerBtn";
   else if (context === "leaderboard" && side === "right") target = "closeLeaderboardBtn";
@@ -175,7 +178,8 @@ function renderPalmControls() {
   const live = controlMode() === "palms" && Boolean(stream);
   document.body.classList.toggle("palm-navigation", live);
   for (const [id, side] of [["startBtn", "right"], ["idleRanksBtn", "left"], ["numberedPlayerBtn", "right"],
-    ["replayPlayerBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"], ["resumeConfirmNo", "left"], ["resumeConfirmYes", "right"]]) {
+    ["replayPlayerBtn", "left"], ["nextPlayerBtn", "right"], ["closeLeaderboardBtn", "right"], ["resumeConfirmNo", "left"], ["resumeConfirmYes", "right"],
+    ["bonusDeclineBtn", "left"], ["bonusShotBtn", "right"]]) {
     const button = $(id);
     button.classList.add("palm-nav");
     button.setAttribute("data-palm", side);
@@ -197,8 +201,23 @@ const QUESTIONS_PER_ROUND = 8;
 const LEADERBOARD_INTERVAL = 3;
 const SPEED_BONUS_MAX = 100;
 const SPEED_BONUS_WINDOW_MS = 10000;
-const PRAISE = ["NICE!", "CLEAN!", "LOCKED IN!", "SHARP!", "YES!", "BOOM!"];
 const CONFETTI_COLORS = ["#7cffcb", "#ffd166", "#7aa2ff", "#ff4d67", "#ffffff", "#b28dff"];
+const COMBO_TIERS = [
+  { min: 5, label: "UNSTOPPABLE", className: "tier-legend", burst: 30 },
+  { min: 4, label: "ON FIRE", className: "tier-fire", burst: 22 },
+  { min: 3, label: "HOT", className: "tier-hot", burst: 14 },
+  { min: 2, label: "WARM", className: "tier-warm", burst: 0 }
+];
+const GOLDEN_MULTIPLIER = 2;
+const BONUS_SHOT_POINTS = 250;
+const BADGES = {
+  perfect: { label: "FIRST PERFECT", icon: "♛", detail: "Finished a round 8/8" },
+  streak5: { label: "5-STREAK", icon: "★", detail: "Answered five in a row" },
+  speed2: { label: "QUICK DRAW", icon: "⚡", detail: "Answered in under two seconds" },
+  redemption: { label: "REDEMPTION HERO", icon: "↺", detail: "Won the one-shot redemption" },
+  golden: { label: "GOLDEN HIT", icon: "✦", detail: "Nailed the golden question" },
+  points1000: { label: "1,000 CLUB", icon: "◆", detail: "Reached 1,000 career points" }
+};
 const MELODY = [659, 0, 784, 0, 988, 0, 784, 0, 659, 0, 523, 0, 587, 0, 659, 0];
 const BASS = [131, 0, 0, 0, 110, 0, 0, 0, 98, 0, 0, 0, 87, 0, 98, 0];
 
@@ -271,6 +290,7 @@ const defaultSettings = {
   controlMode: "palms",
   sfx: true,
   music: true,
+  extras: true,
   faceResume: true,
   tiltThreshold: 12,
   tiltHoldMs: 550,
@@ -298,6 +318,8 @@ function normalizeStudent(raw) {
     answeredTotal: Number(raw?.answeredTotal) || 0,
     recent: Array.isArray(raw?.recent) ? raw.recent.slice(-64) : [],
     marks: Array.isArray(raw?.marks) ? raw.marks.slice(-40) : [],
+    badges: Array.isArray(raw?.badges)
+      ? [...new Set(raw.badges.filter(id => Object.prototype.hasOwnProperty.call(BADGES, id)))].slice(0, 12) : [],
     lastPlayed: Number(raw?.lastPlayed) || 0
   };
 }
@@ -332,6 +354,7 @@ function normalizeDB(raw) {
     db.settings.invertTilt = raw.settings.invertTilt === true;
     db.settings.sfx = raw.settings.sfx !== false;
     db.settings.music = raw.settings.music !== false;
+    db.settings.extras = raw.settings.extras !== false;
     db.settings.faceResume = raw.settings.faceResume !== false;
   }
   if (raw.classes && typeof raw.classes === "object") {
@@ -453,6 +476,7 @@ function isUiBlocking() {
     || !$("faceConfirmModal").classList.contains("hidden")
     || !$("resumeConfirmModal").classList.contains("hidden")
     || !$("countdownOverlay").classList.contains("hidden")
+    || !$("bonusOverlay").classList.contains("hidden")
     || !$("roundOverlay").classList.contains("hidden")
     || !$("leaderboardOverlay").classList.contains("hidden");
 }
@@ -461,11 +485,16 @@ function isPlayBlocked() {
   return isTeacherOpen()
     || !$("leaderboardOverlay").classList.contains("hidden")
     || !$("roundOverlay").classList.contains("hidden")
+    || !$("bonusOverlay").classList.contains("hidden")
     || !$("countdownOverlay").classList.contains("hidden");
 }
 
 function speedBonusFor(elapsedMs) {
   return Math.round(SPEED_BONUS_MAX * (1 - clamp(elapsedMs / SPEED_BONUS_WINDOW_MS, 0, 1)));
+}
+
+function extrasEnabled() {
+  return DB.settings.extras !== false;
 }
 
 function pauseQuestionTimer() {
@@ -530,24 +559,94 @@ function sfxTone(freq, duration, type, volume, when, slideTo) {
   tone(freq, duration, type, volume, when, slideTo, sfxGain);
 }
 
+function chimeTone(freq, duration, volume, when) {
+  if (!DB.settings.sfx) return;
+  tone(freq, duration, "triangle", volume, when, null, sfxGain);
+  tone(freq * 2, duration * 0.55, "sine", volume * 0.4, when, null, sfxGain);
+}
+
+function buzz(pattern) {
+  if (!DB.settings.sfx) return;
+  try { navigator.vibrate?.(pattern); } catch (error) { /* optional feedback */ }
+}
+
+function duckMusic(ms = 360) {
+  if (!DB.settings.music || !audioContext || !musicGain) return;
+  const now = audioContext.currentTime;
+  musicGain.gain.cancelScheduledValues(now);
+  musicGain.gain.setTargetAtTime(0.13, now, 0.02);
+  musicGain.gain.setTargetAtTime(0.55, now + ms / 1000, 0.16);
+}
+
+const COMBO_SCALE = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66];
+
 const sfx = {
   click() {
-    sfxTone(760, 0.05, "square", 0.055);
+    sfxTone(760, 0.05, "square", 0.04);
   },
-  correct() {
-    [523, 659, 784, 1047].forEach((note, index) => {
-      sfxTone(note, 0.12, index === 3 ? "triangle" : "square", 0.11, index * 0.065);
-    });
+  correct(step = 1) {
+    duckMusic(300);
+    const note = COMBO_SCALE[clamp(step - 1, 0, COMBO_SCALE.length - 1)];
+    chimeTone(note, 0.22, 0.12, 0);
+    chimeTone(note * 1.5, 0.16, 0.045, 0.055);
+    buzz(12);
   },
   wrong() {
-    sfxTone(220, 0.18, "sawtooth", 0.1, 0, 130);
-    sfxTone(164, 0.25, "square", 0.08, 0.12, 98);
+    duckMusic(260);
+    sfxTone(196, 0.2, "triangle", 0.09, 0, 146);
+    sfxTone(146, 0.28, "triangle", 0.07, 0.1, 110);
+    buzz(35);
   },
   streak(level) {
-    const root = 660 + Math.min(5, level) * 35;
+    duckMusic(460);
+    const root = 720 + Math.min(5, level) * 30;
     [0, 4, 7, 12].forEach((step, index) => {
-      sfxTone(root * Math.pow(2, step / 12), 0.08, "square", 0.07, index * 0.045);
+      chimeTone(root * Math.pow(2, step / 12), 0.13, 0.055, 0.1 + index * 0.06);
     });
+    buzz([10, 25, 15]);
+  },
+  comboLost() {
+    [392, 330, 262].forEach((note, index) => {
+      chimeTone(note, 0.12, 0.045, index * 0.07);
+    });
+  },
+  golden() {
+    [1046, 1318, 1568, 2093].forEach((note, index) => {
+      chimeTone(note, 0.16, 0.04, index * 0.07);
+    });
+  },
+  goldenCorrect() {
+    duckMusic(520);
+    [1046, 1318, 1568, 2093, 2637].forEach((note, index) => {
+      chimeTone(note, 0.18, 0.075, index * 0.065);
+    });
+    buzz([15, 30, 15, 30]);
+  },
+  bonus(won) {
+    duckMusic(520);
+    if (won) {
+      [523, 659, 784, 1047, 1319].forEach((note, index) => {
+        chimeTone(note, 0.2, 0.09, index * 0.08);
+      });
+      buzz([15, 40, 20]);
+    } else {
+      [392, 311, 262].forEach((note, index) => {
+        chimeTone(note, 0.2, 0.06, index * 0.1);
+      });
+    }
+  },
+  newBest() {
+    duckMusic(620);
+    [523, 659, 784, 1047, 1319, 1568].forEach((note, index) => {
+      chimeTone(note, 0.22, 0.08, index * 0.075);
+    });
+  },
+  badge() {
+    chimeTone(1319, 0.12, 0.06, 0);
+    chimeTone(1760, 0.2, 0.07, 0.09);
+  },
+  star(index) {
+    chimeTone(784 * Math.pow(2, (index % 5) / 12), 0.09, 0.035, 0);
   },
   countdown(value) {
     const note = value > 0 ? 440 + value * 90 : 880;
@@ -555,12 +654,12 @@ const sfx = {
   },
   start() {
     [392, 523, 659, 784].forEach((note, index) => {
-      sfxTone(note, 0.16, "triangle", 0.11, index * 0.08);
+      chimeTone(note, 0.16, 0.11, index * 0.08);
     });
   },
   stop() {
     [784, 659, 523, 392].forEach((note, index) => {
-      sfxTone(note, 0.18, "triangle", 0.09, index * 0.09);
+      chimeTone(note, 0.18, 0.09, index * 0.09);
     });
   },
   capture() {
@@ -569,13 +668,15 @@ const sfx = {
   },
   board() {
     [523, 659, 784].forEach((note, index) => {
-      sfxTone(note, 0.18, "triangle", 0.09, index * 0.1);
+      chimeTone(note, 0.18, 0.09, index * 0.1);
     });
   },
   redemption() {
-    [784, 988, 1175, 1568].forEach((note, index) => {
-      sfxTone(note, 0.1, "square", 0.08, index * 0.06);
+    duckMusic(600);
+    [784, 988, 1175, 1568, 1976].forEach((note, index) => {
+      chimeTone(note, 0.13, 0.08, index * 0.06);
     });
+    buzz([15, 30, 20]);
   },
   lost() {
     sfxTone(330, 0.22, "triangle", 0.07, 0, 220);
@@ -636,7 +737,7 @@ function toast(message, toneName, duration) {
 }
 
 function callout(message, toneName) {
-  if (quietEffects()) return;
+  if (reducedMotion()) return;
   const el = $("callout");
   el.textContent = message;
   el.className = "callout";
@@ -645,7 +746,7 @@ function callout(message, toneName) {
 }
 
 function flashResult(ok) {
-  if (quietEffects()) return;
+  if (reducedMotion() || liteEffects()) return;
   const el = $("screenFlash");
   el.className = "screen-flash";
   void el.offsetWidth;
@@ -655,10 +756,11 @@ function flashResult(ok) {
   });
 }
 
-function confettiBurst(amount) {
-  if (quietEffects()) return;
+function confettiBurst(amount, options) {
+  if (reducedMotion()) return;
   const layer = $("confettiLayer");
-  const count = amount || 34;
+  const requested = amount || 34;
+  const count = liteEffects() ? Math.min(requested, options?.lite ?? 8) : requested;
   for (let index = 0; index < count; index += 1) {
     const piece = document.createElement("span");
     piece.className = "confetti";
@@ -675,12 +777,22 @@ function confettiBurst(amount) {
 }
 
 function shakeScreen() {
-  if (quietEffects()) return;
+  if (reducedMotion()) return;
   const app = $("app");
   app.classList.remove("shake");
   void app.offsetWidth;
   app.classList.add("shake");
   after(450, () => app.classList.remove("shake"));
+}
+
+function pointPop(amount) {
+  if (reducedMotion() || !amount) return;
+  const play = $("play");
+  const pop = document.createElement("span");
+  pop.className = "point-pop";
+  pop.textContent = `+${amount}`;
+  play.appendChild(pop);
+  setTimeout(() => pop.remove(), 950);
 }
 
 function setHudStudent(student, label) {
@@ -719,15 +831,29 @@ function updateSessionHud() {
   $("stopGameBtn").classList.toggle("hidden", !active);
 }
 
+function comboFor(value) {
+  const number = Number(value) || 0;
+  return COMBO_TIERS.find(tier => number >= tier.min) || null;
+}
+
 function setStreak(value) {
   const number = clamp(Number(value) || 0, 0, 5);
+  const streak = Number(value) || 0;
   $("streakValue").textContent = String(value || 0);
-  $("liveStreak").textContent = `${value || 0} streak`;
+  const combo = comboFor(streak);
+  $("liveStreak").textContent = combo ? `×${streak} ${combo.label}` : `${streak} streak`;
   $("livePoints").textContent = `${round?.points || 0} points`;
   Array.from($("streakStars").children).forEach((star, index) => {
     star.classList.toggle("lit", index < number);
   });
   $("streakRack").classList.toggle("hot", number >= 3);
+  const chip = $("comboChip");
+  chip.classList.toggle("hidden", !combo);
+  if (combo) {
+    chip.textContent = `×${streak} ${combo.label}`;
+    COMBO_TIERS.forEach(tier => chip.classList.remove(tier.className));
+    chip.classList.add(combo.className);
+  }
 }
 
 function showScreen(name) {
@@ -748,6 +874,7 @@ function hideGameOverlays() {
   closeFaceResumeConfirmation();
   closeFaceConfirmation();
   hideOverlay("countdownOverlay");
+  hideOverlay("bonusOverlay");
   hideOverlay("roundOverlay");
   hideOverlay("playerLost");
 }
@@ -1402,6 +1529,9 @@ function renderSettings() {
   $("invertTiltToggle").classList.toggle("on", DB.settings.invertTilt);
   $("faceResumeToggle").setAttribute("aria-pressed", String(DB.settings.faceResume));
   $("faceResumeToggle").textContent = DB.settings.faceResume ? "FACE RESUME ON" : "FACE RESUME OFF";
+  $("extrasToggle").setAttribute("aria-pressed", String(DB.settings.extras !== false));
+  $("extrasToggle").classList.toggle("on", DB.settings.extras !== false);
+  $("extrasToggle").textContent = DB.settings.extras !== false ? "GAME EXTRAS ON" : "GAME EXTRAS OFF";
   updateSoundUI();
 }
 
@@ -1834,6 +1964,12 @@ function startRound(student) {
     streak: 0,
     best: 0,
     redemption: { active: false, q: null, won: false },
+    goldenIndex: QUESTIONS_PER_ROUND - 1,
+    goldenHit: false,
+    bonusShot: { active: false, q: null },
+    bonus: "none",
+    newBadges: [],
+    newBest: false,
     lastSeen: Date.now(),
     pointsThisRound: 0
   };
@@ -1854,20 +1990,34 @@ function renderQuestion() {
   const question = currentQuestion();
   if (!question) return;
   const redemption = round.redemption.active;
-  $("questionCounter").textContent = redemption ? "REDEMPTION SHOT" : `QUESTION ${round.qi + 1} / ${QUESTIONS_PER_ROUND}`;
-  $("questionTopic").textContent = String(question.topic || "GRAMMAR").toUpperCase();
+  const bonus = Boolean(round.bonusShot.active);
+  const golden = !redemption && !bonus && extrasEnabled() && round.qi === round.goldenIndex;
+  $("questionCounter").textContent = bonus ? "BONUS SHOT" : redemption ? "REDEMPTION SHOT" : `QUESTION ${round.qi + 1} / ${QUESTIONS_PER_ROUND}`;
+  $("questionTopic").textContent = bonus ? "PERFECT BONUS" : String(question.topic || "GRAMMAR").toUpperCase();
   $("redemptionChip").classList.toggle("hidden", !redemption);
   $("redemptionChip").textContent = redemption ? "ONE SHOT · ONE REDEMPTION" : "REDEMPTION READY";
   $("redemptionChip").classList.remove("used");
+  $("goldenChip").classList.toggle("hidden", !golden);
+  $("goldenChip").textContent = `GOLDEN ×${GOLDEN_MULTIPLIER}`;
+  const banner = $("goldenBanner");
+  banner.classList.toggle("hidden", !golden && !bonus);
+  banner.classList.toggle("bonus-banner", bonus);
+  banner.textContent = bonus ? `BONUS SHOT · +${BONUS_SHOT_POINTS} POINTS` : `GOLDEN QUESTION · ${GOLDEN_MULTIPLIER}× POINTS`;
+  $("play").classList.toggle("golden-question", golden);
+  $("play").classList.toggle("bonus-question", bonus);
   $("sentence").innerHTML = sentenceMarkup(question);
   $("optionLeftText").textContent = String(question.options?.[0] ?? "");
   $("optionRightText").textContent = String(question.options?.[1] ?? "");
   $("feedbackLine").className = "feedback-line";
-  $("feedbackLine").textContent = redemption
-    ? "One error this round. Make this shot count."
-    : answerPrompt();
+  $("feedbackLine").textContent = bonus
+    ? `One bonus question. A correct answer adds +${BONUS_SHOT_POINTS} points.`
+    : redemption
+      ? "One error this round. Make this shot count."
+      : answerPrompt();
   $("tiltCaption").textContent = "CENTRE YOUR HEAD";
-  $("play").classList.remove("tilting-left", "tilting-right");
+  $("play").classList.remove("tilting-left", "tilting-right", "question-enter");
+  void $("play").offsetWidth;
+  $("play").classList.add("question-enter");
   ["optionLeft", "optionRight"].forEach((id) => {
     $(id).classList.remove("good", "bad", "dim", "tilt-target");
     $(id).querySelector(".option-charge i").style.width = "0%";
@@ -1884,6 +2034,7 @@ function renderQuestion() {
   round.questionTimer = { elapsedMs: 0, startedAt: null };
   resumeQuestionTimer();
   syncTracking();
+  if (golden || bonus) sfx.golden();
 }
 
 function sentenceMarkup(question) {
@@ -1902,6 +2053,7 @@ function sentenceMarkup(question) {
 
 function currentQuestion() {
   if (!round) return null;
+  if (round.bonusShot?.active) return round.bonusShot.q;
   return round.redemption.active ? round.redemption.q : round.qs[round.qi];
 }
 
@@ -1912,15 +2064,18 @@ function correctIndex(question) {
   return found === 0 || found === 1 ? found : 0;
 }
 
-function renderProgress() {
+function renderProgress(changedIndex = -1) {
   if (!round) return;
   const dots = [];
   for (let index = 0; index < QUESTIONS_PER_ROUND; index += 1) {
     const state = round.results[index] || "";
-    dots.push(`<span class="dot ${state}"></span>`);
+    dots.push(`<span class="dot ${state}${index === changedIndex ? " pop" : ""}"></span>`);
   }
   if (round.redemption.active) {
-    dots.push(`<span class="dot retry ${round.redemption.won ? "correct" : ""}"></span>`);
+    dots.push(`<span class="dot retry${round.redemption.won ? " correct" : ""}${round.answered ? " pop" : ""}"></span>`);
+  }
+  if (round.bonusShot?.active) {
+    dots.push(`<span class="dot bonus${round.answered ? " pop" : ""}"></span>`);
   }
   $("progressDots").innerHTML = dots.join("");
 }
@@ -2019,6 +2174,14 @@ function updateTilt(now) {
   if (held >= DB.settings.tiltHoldMs) answer(side);
 }
 
+function unlockBadge(student, id) {
+  if (!student || !BADGES[id]) return;
+  if (!Array.isArray(student.badges)) student.badges = [];
+  if (student.badges.includes(id)) return;
+  student.badges.push(id);
+  if (round && Array.isArray(round.newBadges) && !round.newBadges.includes(id)) round.newBadges.push(id);
+}
+
 function answer(side) {
   if (phase !== "play" || !round || round.answered) return;
   if (isPlayBlocked() || document.hidden || lostShown) return;
@@ -2035,29 +2198,64 @@ function answer(side) {
   const correct = correctIndex(question);
   const chosen = side === "left" ? 0 : 1;
   const ok = chosen === correct;
+  const bonusShot = Boolean(round.bonusShot?.active);
+  const redemption = Boolean(round.redemption.active);
+  const golden = !bonusShot && !redemption && extrasEnabled() && round.qi === round.goldenIndex;
   const speedBonus = ok ? speedBonusFor(elapsedMs) : 0;
-  round.speedBonus += speedBonus;
   const timingFeedback = `${(elapsedMs / 1000).toFixed(1)}s · +${speedBonus} SPEED`;
   const chosenEl = chosen === 0 ? $("optionLeft") : $("optionRight");
   const correctEl = correct === 0 ? $("optionLeft") : $("optionRight");
   const otherEl = correct === 0 ? $("optionRight") : $("optionLeft");
+  if (bonusShot) {
+    if (ok) {
+      chosenEl.classList.add("good");
+      otherEl.classList.add("dim");
+      flashResult(true);
+      round.points += BONUS_SHOT_POINTS;
+      round.pointsThisRound += BONUS_SHOT_POINTS;
+      round.bonus = "won";
+      sfx.bonus(true);
+      confettiBurst(64, { lite: 10 });
+      callout(`BONUS +${BONUS_SHOT_POINTS}`, "good");
+      pointPop(BONUS_SHOT_POINTS);
+      $("feedbackLine").className = "feedback-line good";
+      $("feedbackLine").textContent = `BONUS SHOT MADE! · +${BONUS_SHOT_POINTS}${question.tip ? ` — ${question.tip}` : ""}`;
+    } else {
+      chosenEl.classList.add("bad");
+      correctEl.classList.add("good");
+      otherEl.classList.add("dim");
+      flashResult(false);
+      shakeScreen();
+      round.bonus = "missed";
+      sfx.bonus(false);
+      callout("BONUS MISSED", "bad");
+      $("feedbackLine").className = "feedback-line bad";
+      $("feedbackLine").textContent = `No bonus this time. Answer: ${question.options?.[correct] || question.c || ""}.`;
+    }
+    renderProgress(round.qi);
+    after(1700, finishRound);
+    return;
+  }
   if (ok) {
     chosenEl.classList.add("good");
     otherEl.classList.add("dim");
     flashResult(true);
-    callout(PRAISE[Math.floor(Math.random() * PRAISE.length)], "good");
-    if (round.redemption.active) {
+    if (redemption) {
       round.redemption.won = true;
       round.points += 250 + speedBonus;
       round.pointsThisRound += 250 + speedBonus;
+      round.speedBonus += speedBonus;
       sfx.redemption();
-      confettiBurst(46);
+      confettiBurst(46, { lite: 8 });
       $("feedbackLine").className = "feedback-line good";
       $("feedbackLine").textContent = `REDEMPTION WON! · ${timingFeedback}${question.tip ? ` — ${question.tip}` : ""}`;
       callout(`+${250 + speedBonus}`, "good");
+      pointPop(250 + speedBonus);
       $("redemptionChip").classList.add("used");
       $("redemptionChip").textContent = "REDEMPTION USED";
-      renderProgress();
+      unlockBadge(round.student, "redemption");
+      if (elapsedMs < 2000) unlockBadge(round.student, "speed2");
+      renderProgress(round.qi);
       after(1600, finishRound);
       return;
     }
@@ -2065,16 +2263,36 @@ function answer(side) {
     round.results[round.qi] = "correct";
     round.streak += 1;
     round.best = Math.max(round.best, round.streak);
-    const award = 100 + Math.max(0, round.streak - 1) * 25 + speedBonus;
+    const baseAward = 100 + Math.max(0, round.streak - 1) * 25 + speedBonus;
+    const award = golden ? baseAward * GOLDEN_MULTIPLIER : baseAward;
     round.points += award;
     round.pointsThisRound += award;
-    sfx.correct();
-    if (round.streak >= 2) sfx.streak(round.streak);
-    if (round.streak >= 4) confettiBurst(24);
-    callout(`+${award}`, "good");
+    round.speedBonus += golden ? speedBonus * GOLDEN_MULTIPLIER : speedBonus;
+    const tier = comboFor(round.streak);
+    const priorTier = comboFor(round.streak - 1);
+    const tierUp = Boolean(tier && tier.label !== priorTier?.label);
+    if (golden) {
+      round.goldenHit = true;
+      unlockBadge(round.student, "golden");
+      sfx.goldenCorrect();
+      confettiBurst(66, { lite: 10 });
+      callout(`GOLDEN +${award}`, "good");
+    } else {
+      sfx.correct(round.streak);
+      if (tierUp) {
+        callout(`${tier.label}!`, "good");
+        after(120, () => sfx.streak(round.streak));
+      } else {
+        callout(`+${award}`, "good");
+      }
+      if (tierUp && tier.burst) confettiBurst(tier.burst, { lite: 6 });
+    }
+    if (elapsedMs < 2000) unlockBadge(round.student, "speed2");
+    if (round.streak >= 5) unlockBadge(round.student, "streak5");
+    pointPop(award);
     $("feedbackLine").className = "feedback-line good";
-    $("feedbackLine").textContent = `CORRECT · ${timingFeedback}${question.tip ? ` — ${question.tip}` : ""}`;
-    renderProgress();
+    $("feedbackLine").textContent = `${golden ? "GOLDEN CORRECT" : "CORRECT"} · ${timingFeedback}${golden ? ` · ×${GOLDEN_MULTIPLIER}` : ""}${question.tip ? ` — ${question.tip}` : ""}`;
+    renderProgress(round.qi);
     setStreak(round.streak);
     after(1250, advanceRound);
   } else {
@@ -2084,41 +2302,91 @@ function answer(side) {
     flashResult(false);
     shakeScreen();
     sfx.wrong();
-    callout(round.redemption.active ? "REDEMPTION MISSED" : "NOT QUITE", "bad");
-    if (round.redemption.active) {
+    const brokenCombo = round.streak >= 3;
+    callout(redemption ? "REDEMPTION MISSED" : brokenCombo ? "COMBO LOST" : "NOT QUITE", "bad");
+    if (redemption) {
       $("feedbackLine").className = "feedback-line bad";
       $("feedbackLine").textContent = `Missed. Answer: ${question.options?.[correct] || question.c || ""}.`;
-      renderProgress();
+      renderProgress(round.qi);
       after(1700, finishRound);
       return;
     }
     round.wrong += 1;
     round.results[round.qi] = "wrong";
     round.streak = 0;
+    if (brokenCombo) after(120, () => sfx.comboLost());
     setStreak(0);
     $("feedbackLine").className = "feedback-line bad";
     $("feedbackLine").textContent = `Answer: ${question.options?.[correct] || question.c || ""} — ${question.tip || ""}`.trim();
-    renderProgress();
+    renderProgress(round.qi);
     after(1700, advanceRound);
   }
 }
 
 function advanceRound() {
   if (!round || phase !== "play") return;
-  if (round.redemption.active) {
+  if (round.redemption.active || round.bonusShot?.active) {
     finishRound();
     return;
   }
   round.qi += 1;
   if (round.qi >= QUESTIONS_PER_ROUND) {
+    const mainCorrect = round.results.filter((value) => value === "correct").length;
     if (round.wrong === 1) {
       startRedemption();
+    } else if (extrasEnabled() && mainCorrect === QUESTIONS_PER_ROUND && unusedQuestionCount() > 0) {
+      startBonusPrompt();
     } else {
       finishRound();
     }
     return;
   }
   renderQuestion();
+}
+
+function startBonusPrompt() {
+  if (!round || phase !== "play") return;
+  phase = "bonus";
+  const kicker = document.querySelector(".bonus-kicker");
+  if (kicker) kicker.textContent = "PERFECT ROUND · 8/8";
+  $("bonusOverlay").classList.remove("hidden");
+  $("bonusDeclineBtn").disabled = false;
+  $("bonusShotBtn").disabled = false;
+  renderPalmControls();
+  syncTracking();
+  sfx.goldenCorrect();
+  confettiBurst(70, { lite: 8 });
+  callout("PERFECT!", "good");
+}
+
+function declineBonusShot() {
+  if (!round || phase !== "bonus") return;
+  hideOverlay("bonusOverlay");
+  round.bonus = "declined";
+  phase = "play";
+  finishRound();
+}
+
+function startBonusShot() {
+  if (!round || phase !== "bonus") return;
+  const question = pickQuestion(round.qs, new Set(round.qs.map(item => item.topic)));
+  if (!question) {
+    hideOverlay("bonusOverlay");
+    round.bonus = "none";
+    phase = "play";
+    finishRound();
+    return;
+  }
+  hideOverlay("bonusOverlay");
+  round.bonusShot = { active: true, q: question };
+  round.bonus = "missed";
+  phase = "play";
+  round.answered = false;
+  round.lastSeen = Date.now();
+  tilt = { armed: false, side: null, since: 0 };
+  updateSessionHud();
+  renderQuestion();
+  toast("Bonus shot! One question for +250 points.", "good", 2800);
 }
 
 function startRedemption() {
@@ -2140,20 +2408,27 @@ function finishRound() {
   const student = round.student;
   const mainCorrect = round.results.filter((value) => value === "correct").length;
   const redemptionWon = Boolean(round.redemption.active && round.redemption.won);
+  const bonusWon = round.bonus === "won";
   const gained = Math.min(QUESTIONS_PER_ROUND, mainCorrect + (redemptionWon ? 1 : 0));
   if (mainCorrect === QUESTIONS_PER_ROUND) {
     round.points += 300;
     round.pointsThisRound += 300;
   }
   const perfect = mainCorrect === QUESTIONS_PER_ROUND;
+  const previousMarks = Array.isArray(student.marks) ? student.marks : [];
+  const previousBest = previousMarks.length
+    ? Math.max(...previousMarks.map(mark => Number(mark.points) || 0)) : 0;
+  round.newBest = previousMarks.length > 0 && round.points > previousBest;
+  if (perfect) unlockBadge(student, "perfect");
   student.totalScore = (Number(student.totalScore) || 0) + round.points;
+  if (student.totalScore >= 1000) unlockBadge(student, "points1000");
   student.bestStreak = Math.max(Number(student.bestStreak) || 0, round.best);
   student.games = (Number(student.games) || 0) + 1;
   student.correctTotal = (Number(student.correctTotal) || 0) + gained;
   student.answeredTotal = (Number(student.answeredTotal) || 0) + QUESTIONS_PER_ROUND;
   student.lastPlayed = Date.now();
   student.recent = [...(student.recent || []), ...round.results].slice(-64);
-  student.marks = [...(student.marks || []), {
+  student.marks = [...previousMarks, {
     at: Date.now(),
     gained,
     form: selectedForm(),
@@ -2164,6 +2439,9 @@ function finishRound() {
     speedBonus: round.speedBonus,
     responseTimesMs: [...round.responseTimesMs],
     best: round.best,
+    golden: Boolean(round.goldenHit),
+    bonus: round.bonus || "none",
+    newBest: round.newBest,
     redemption: round.redemption.active ? (redemptionWon ? "saved" : "missed") : "none"
   }].slice(-40);
   DB.history.push({
@@ -2179,23 +2457,28 @@ function finishRound() {
     speedBonus: round.speedBonus,
     responseTimesMs: [...round.responseTimesMs],
     best: round.best,
+    golden: Boolean(round.goldenHit),
+    bonus: round.bonus || "none",
     redemption: redemptionWon ? "saved" : round.redemption.active ? "missed" : "none"
   });
   DB.history = DB.history.slice(-400);
   session.rounds += 1;
   session.roundsSinceBoard += 1;
   lastFinishedId = student.id;
-  lastSummary = { gained, points: round.points };
+  lastSummary = { gained, points: round.points, bonusWon };
   round.gained = gained;
   round.perfect = perfect;
   phase = "round";
+  hideOverlay("bonusOverlay");
   saveDB();
   refreshAll();
   updateSessionHud();
   setStreak(round.best);
   showRoundOverlay(round);
-  sfx.correct();
-  if (gained >= 7) confettiBurst(gained === 8 ? 70 : 42);
+  if (round.newBest) sfx.newBest();
+  else sfx.correct(5);
+  if (round.newBadges.length) after(420, () => sfx.badge());
+  if (gained >= 7) confettiBurst(gained === 8 ? 70 : 42, { lite: gained === 8 ? 8 : 6 });
 }
 
 function showRoundOverlay(result) {
@@ -2210,19 +2493,36 @@ function showRoundOverlay(result) {
   $("roundSpeedBonus").textContent = `Includes +${result.speedBonus} speed points`;
   $("roundStreak").textContent = String(result.best);
   $("roundRetries").textContent = redemptionText;
+  $("roundBest").classList.toggle("hidden", !result.newBest);
+  const bonusNote = $("roundBonusNote");
+  const bonusPlayed = result.bonus === "won" || result.bonus === "missed";
+  bonusNote.classList.toggle("hidden", !bonusPlayed);
+  bonusNote.textContent = result.bonus === "won"
+    ? `Bonus shot +${BONUS_SHOT_POINTS} points`
+    : "Bonus shot missed — no points lost";
+  const newBadges = (result.newBadges || []).filter(id => BADGES[id]);
+  $("roundBadges").innerHTML = newBadges.map(id => (
+    `<span class="badge-chip" title="${BADGES[id].detail}"><b>${BADGES[id].icon}</b>${BADGES[id].label}</span>`
+  )).join("");
+  $("roundBadges").classList.toggle("hidden", !newBadges.length);
   const lit = Math.round((result.gained / QUESTIONS_PER_ROUND) * 5);
   $("roundStars").innerHTML = Array.from({ length: 5 }, (_, index) => (
-    `<span class="${index < lit ? "lit" : ""}">★</span>`
+    `<span class="${index < lit ? "lit" : ""}" style="--i:${index}">★</span>`
   )).join("");
+  for (let index = 0; index < lit; index += 1) after(180 + index * 85, () => sfx.star(index));
   const kicker = document.querySelector(".round-kicker");
   if (kicker) {
-    kicker.textContent = result.perfect
-      ? "PERFECT ROUND"
-      : result.redemption.won
-        ? "REDEMPTION WON"
-        : result.redemption.active
-          ? "ROUND COMPLETE · REDEMPTION MISSED"
-          : "ROUND COMPLETE";
+    kicker.textContent = result.perfect && result.bonus === "won"
+      ? "PERFECT + BONUS"
+      : result.perfect && result.bonus === "missed"
+        ? "PERFECT · BONUS MISSED"
+        : result.perfect
+          ? "PERFECT ROUND"
+          : result.redemption.won
+            ? "REDEMPTION WON"
+            : result.redemption.active
+              ? "ROUND COMPLETE · REDEMPTION MISSED"
+              : "ROUND COMPLETE";
   }
   $("roundOverlay").classList.remove("hidden");
   syncTracking();
@@ -2274,7 +2574,17 @@ function podiumCharacter(student, rank, priorRank, leaving = false) {
         ${avatarHTML(student, "lb-portrait podium-head")}
       </div>
       <div class="podium-player">PLAYER ${playerNumber}</div>
+      ${badgeStrip(student)}
     </div>`;
+}
+
+function badgeStrip(student) {
+  const ids = Array.isArray(student?.badges) ? student.badges.filter(id => BADGES[id]) : [];
+  if (!ids.length) return "";
+  const shown = ids.slice(0, 4).map(id => (
+    `<span class="lb-badge" title="${BADGES[id].label}: ${BADGES[id].detail}" aria-label="${BADGES[id].label}">${BADGES[id].icon}</span>`
+  )).join("");
+  return `<div class="lb-badges">${shown}${ids.length > 4 ? `<span class="lb-badge more">+${ids.length - 4}</span>` : ""}</div>`;
 }
 
 function leaderboardRows() {
@@ -2294,6 +2604,7 @@ function leaderboardRows() {
       ${avatarHTML(student, "lb-portrait")}
       <div class="lb-points">${student.totalScore || 0}<span>POINTS</span></div>
       <div class="lb-face-stats"><span><b>${student.bestStreak || 0}</b> BEST STREAK</span><span><b>${accuracyLabel(student)}</b> ACCURACY</span></div>
+      ${badgeStrip(student)}
       ${student.id === lastFinishedId ? '<div class="lb-latest">JUST PLAYED</div>' : ""}
     </article>`).join("") + `</div>`;
 }
@@ -2328,7 +2639,7 @@ function showLeaderboard(options) {
   const revision = ++boardRevision;
   const config = options || {};
   const final = Boolean(config.final);
-  const fallbackAfter = final ? "lobby" : phase === "play" ? "resume" : "idle";
+  const fallbackAfter = final ? "lobby" : phase === "play" || phase === "bonus" ? "resume" : "idle";
   boardContext = { final, after: config.after || fallbackAfter, replayStudentId: config.replayStudentId || null };
   if (session?.active) {
     if (config.auto) session.roundsSinceBoard = 0;
@@ -2478,6 +2789,8 @@ function bindEvents() {
   });
   $("nextPlayerBtn").addEventListener("click", nextPlayer);
   $("replayPlayerBtn").addEventListener("click", replayPlayer);
+  $("bonusDeclineBtn").addEventListener("click", declineBonusShot);
+  $("bonusShotBtn").addEventListener("click", startBonusShot);
   $("closeLeaderboardBtn").addEventListener("click", closeLeaderboard);
   $("leaderboardBtn").addEventListener("click", () => {
     if (phase === "play") showLeaderboard({ after: "resume" });
@@ -2544,6 +2857,12 @@ function bindEvents() {
   $("startTurnBtn").addEventListener("click", () => startTurn());
   $("soundToggle").addEventListener("click", () => setSfx(!DB.settings.sfx));
   $("musicToggle").addEventListener("click", () => setMusic(!DB.settings.music));
+  $("extrasToggle").addEventListener("click", () => {
+    DB.settings.extras = DB.settings.extras === false;
+    saveDB();
+    renderSettings();
+    toast(DB.settings.extras ? "Golden question 8 and bonus shots are on." : "Bonus questions are off. Scoring returns to the classic rules.", "good", 3200);
+  });
   $("cameraToggleBtn").addEventListener("click", () => {
     if (stream) stopCamera();
     else startCamera();

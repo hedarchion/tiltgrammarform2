@@ -88,6 +88,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   for (let i = 0; i < 8; i++) {
     run('answer(correctIndex(currentQuestion()) === 0 ? "left" : "right"); advanceRound();');
   }
+  run('if (phase === "bonus") declineBonusShot();');
   assert.equal(run('phase'), 'round');
   assert.equal(run('currentStudents()[0].games'), 1);
   assert.equal(run('currentStudents()[0].correctTotal'), 8);
@@ -224,19 +225,21 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('round.questionTimer.elapsedMs'), 0, 'redemption gets a fresh clock');
   now += 2000;
   run(correctAnswer);
-  assert.equal(run('round.points'), 1535, 'redemption adds 250 base and 80 speed points');
+  assert.equal(run('round.points'), 1735, 'golden question 8 doubles its award, then redemption adds 250 base and 80 speed points');
   run('finishRound();');
   assert.equal(run('currentStudents()[0].correctTotal'), 8, 'speed does not change marks');
-  assert.equal(run('currentStudents()[0].totalScore'), 1535);
-  assert.ok(nodes.get('roundSpeedBonus').textContent.includes('+360'));
+  assert.equal(run('currentStudents()[0].totalScore'), 1735);
+  assert.ok(nodes.get('roundSpeedBonus').textContent.includes('+410'));
   run('DB=loadDB();');
-  assert.equal(run('currentStudents()[0].marks[0].speedBonus'), 360, 'speed bonus persists');
+  assert.equal(run('currentStudents()[0].marks[0].speedBonus'), 410, 'speed bonus persists');
   assert.deepEqual(Array.from(run('currentStudents()[0].marks[0].responseTimesMs')), [2000,5000,10000,15000,0,5000,5000,5000,2000]);
-  assert.equal(run('DB.history.at(-1).points'), 1535, 'history includes speed points');
+  assert.equal(run('DB.history.at(-1).points'), 1735, 'history includes speed points');
   // Perfect round, identical timing via shared answer path, and missed redemption.
   run('enterIdle(); startRound(currentStudents()[0]);');
   for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
-  assert.equal(run('round.points'), 2600, 'perfect bonus and all streak points remain alongside speed');
+  assert.equal(run('phase'), 'bonus', 'a perfect round offers the optional bonus shot');
+  run('declineBonusShot();');
+  assert.equal(run('round.points'), 2975, 'perfect bonus, golden question and all streak points remain alongside speed');
   run('enterIdle(); startRound(currentStudents()[0]);');
   for (let i = 0; i < 8; i++) run(`${i === 0 ? wrongAnswer : correctAnswer} advanceRound();`);
   const beforeMissedRedemption = run('round.points');
@@ -296,6 +299,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('startRound(currentStudents()[0]);');
   assert.ok(run('round.qs.every(q => DIFFICULTY_TOPICS[2].challenge.includes(q.topic))'), 'solo uses selected difficulty');
   for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
+  run('if (phase === "bonus") declineBonusShot();');
   assert.equal(run('phase'), 'round');
   assert.equal(nodes.get('replayPlayerBtn').textContent, 'PLAY AGAIN');
   assert.equal(nodes.get('nextPlayerBtn').textContent, 'MENU');
@@ -595,6 +599,32 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('phase'), 'lobby', 'a stale Yes after Stop cannot restart play');
   run('stream=null; syncTracking();');
   assert.equal(run('palmTrackingNeeded()'), false, 'camera-off navigation uses no inference');
+  // Game extras: golden question, optional bonus shot, combo UI and badges.
+  run('stopSession(); createClass("Bonus test"); DB.settings.extras=true; startSession(); startNumberedPlayer(); startRound(currentStudents()[0]);');
+  for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
+  assert.equal(run('round.goldenHit'), true, 'question 8 is golden when extras are on');
+  assert.equal(run('phase'), 'bonus', 'a perfect round prompts for the bonus shot');
+  assert.equal(run('round.points'), 2675, 'golden question doubles its own award');
+  run('startBonusShot();');
+  assert.equal(run('round.bonusShot.active'), true);
+  run(correctAnswer);
+  assert.equal(run('round.bonus'), 'won');
+  assert.equal(run('round.points'), 2925, 'bonus shot adds 250 arcade points before the perfect bonus');
+  run('finishRound();');
+  assert.equal(run('round.gained'), 8, 'bonus points never change marks');
+  assert.equal(run('round.points'), 3225, 'perfect bonus follows the bonus shot');
+  assert.ok(run('currentStudents()[0].badges.includes("perfect")'), 'perfect badge unlocks');
+  assert.ok(run('currentStudents()[0].badges.includes("golden")'), 'golden badge unlocks');
+  assert.ok(run('currentStudents()[0].badges.includes("streak5")'), 'five-streak badge unlocks');
+  assert.ok(run('currentStudents()[0].badges.includes("speed2")'), 'quick-draw badge unlocks');
+  assert.equal(run('DB.history.at(-1).bonus'), 'won', 'bonus result persists in history');
+  run('enterIdle(); DB.settings.extras=false; startRound(currentStudents()[0]);');
+  for (let i = 0; i < 8; i++) run(`${correctAnswer} advanceRound();`);
+  assert.equal(run('phase'), 'round', 'extras off skips the bonus prompt');
+  assert.equal(run('round.goldenHit'), false, 'extras off disables the golden question');
+  assert.equal(run('round.points'), 2600, 'extras off restores classic scoring');
+  run('DB.settings.extras=true; nextPlayer();');
+  console.log('Passed: golden question, optional bonus shot, combo tiers, badges and the extras toggle.');
   console.log('Passed: instant palm navigation for class start, player entry, results, ranks, solo replay and menu; held/stale gesture, settings and photo-confirmation guards.');
   console.log('Passed: lazy model loading, recognition separation, no render loop, and face inference gated by explicit use, visibility, overlays and answer state.');
   console.log('Passed: three-turn leaderboard cadence, manual view counter, rank persistence, attached character bodies, promotion/demotion and reduced motion.');

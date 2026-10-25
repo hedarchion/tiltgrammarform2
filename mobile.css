@@ -18,7 +18,7 @@
   /* Keep the source video alive for inference without painting a fullscreen feed. */
   .camera-layer { position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; }
   #camera { filter:none; transition:none; }
-  .camera-layer::after, .camera-veil, .scanlines, .screen-flash, .callout, .confetti-layer { display:none; }
+  .camera-layer::after, .camera-veil, .scanlines, .screen-flash { display:none; }
   .panel, .sentence-card, .option-card, .round-card, .countdown-card, .lost-card,
   .leaderboard-card, .drawer, .drawer-scrim, .overlay, .face-card, .hud-btn, .hud-chip,
   .streak-rack, .meta-chip, .idle-badge, .btn, .btn.ghost, .toggle, .roster-pill {
@@ -28,7 +28,7 @@
   .option-card::before, .option-card::after, .round-card::before, .round-card::after,
   .countdown-card::before, .countdown-card::after, .leaderboard-card::before, .leaderboard-card::after,
   .lost-card::before, .lost-card::after { display:none; }
-  .screen, .overlay, .countdown-number, .option-card.good, .option-card.bad, .round-card, .countdown-card, .leaderboard-card { animation:none; }
+  .screen { animation:none; }
   .hud {
     grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px;
     min-height:68px; padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));
@@ -95,6 +95,12 @@
   .meta-chip { border:0; background:none; padding:0; font:900 12px var(--body); color:var(--muted); letter-spacing:0; }
   .meta-chip.topic { font-size:11px; color:#b8c9e8; }
   .meta-chip.redemption { font-size:11px; color:var(--yellow); }
+  .meta-chip.golden { font:900 10px var(--body); color:#3b2500; padding:3px 8px; border-radius:999px; }
+  .meta-chip.combo { font:900 10px var(--body); padding:3px 8px; border-radius:999px; }
+  .golden-banner { display:none; }
+  .play.golden-question .sentence-card { background:#f7e5ae; }
+  .play.bonus-question .sentence-card { background:#d9f6e8; }
+  .point-pop { font-size:18px; top:50%; }
   .progress-dots { gap:4px; }
   .dot { width:7px; height:7px; border-radius:50%; }
   .mobile-round-score { display:flex; justify-content:space-between; width:100%; font-size:12px; font-weight:800; color:var(--dim); }
@@ -147,7 +153,18 @@
   .idle-rank-card .pts { font:800 12px var(--body); }
 
   .overlay { position:fixed; inset:0; padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); background:rgba(5,17,24,.94); overflow:auto; }
-  .round-card, .countdown-card, .lost-card, .leaderboard-card { width:min(480px,100%); padding:24px 20px; border:1px solid #45606b; border-radius:24px; background:#142d38; box-shadow:none; max-height:calc(100dvh - 32px); overflow:auto; margin:auto; }
+  .callout { top:34%; font-size:clamp(18px,6vw,30px); text-shadow:0 3px 0 rgba(0,0,0,.45); }
+  .round-card, .countdown-card, .lost-card, .leaderboard-card, .bonus-card { width:min(480px,100%); padding:24px 20px; border:1px solid #45606b; border-radius:24px; background:#142d38; box-shadow:none; max-height:calc(100dvh - 32px); overflow:auto; margin:auto; }
+  .bonus-card { border-color:#8e7c4e; }
+  .bonus-kicker { font:900 11px var(--body); letter-spacing:.08em; color:var(--yellow); }
+  .bonus-title { font:900 28px var(--body); margin:8px 0; }
+  .bonus-sub { font-size:14px; line-height:1.5; margin-bottom:16px; }
+  .round-best { font:900 9px var(--body); letter-spacing:.05em; margin-top:6px; }
+  .round-badges { gap:6px; margin-bottom:12px; }
+  .badge-chip { font:900 10px var(--body); letter-spacing:0; padding:6px 9px; }
+  .badge-chip b { font-size:12px; }
+  .lb-badges { min-height:20px; }
+  .lb-badge { width:20px; height:20px; font-size:10px; }
   .round-portrait { width:64px; height:64px; border-radius:18px; font-size:20px; margin-bottom:14px; }
   .round-kicker, .countdown-kicker, .lb-kicker, .lost-kicker { font:900 12px var(--body); letter-spacing:.08em; }
   .round-name { font:900 24px var(--body); margin:8px 0; }

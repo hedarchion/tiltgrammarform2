@@ -6,6 +6,8 @@ A static classroom game with a Form 1/Form 2 selector: 1,000 easy Form 1 questio
 across 10 topics and the original 1,000 Form 2 questions across 20 topics. There are eight
 questions per turn and a redemption question after exactly one error. Thirty
 students can play three turns each: 720 main questions plus up to 90 redemptions.
+Combos, chimes, a golden final question, an optional perfect-round bonus shot and
+collectible badges add arcade feel without changing the marks out of eight.
 
 ## Single player and difficulty
 
@@ -100,8 +102,7 @@ expandable settings groups. Glass remains available at any screen size.
 - Camera capture requests 640×360 at up to 30 fps, rather than 1280×720. Palm
   classification still runs on fresh camera frames without a confirmation timer;
   only preview painting is capped at 12 fps. Hidden previews are not painted.
-- Lite skips full-screen camera compositing, backdrop blur, screen
-  flashes, callout effects and confetti particles.
+- Lite keeps the power saving renderer off, but now uses cheap CSS-only celebrations: chimes, combo labels, answer card feedback, callouts and a capped confetti burst. It still skips full-screen camera compositing, backdrop blur and full-screen flashes.
 
 These changes remove work; device-specific battery life and tracking latency have
 not been measured on physical phones. To inspect layouts locally, open
@@ -231,6 +232,32 @@ locally with the bundled MediaPipe Hands 0.4.1675469240 runtime and lite model
 (Apache 2.0); video is not uploaded. Camera permission is needed only for gestures
 or photo capture. `node tests/palm-control.test.cjs` checks input gating.
 
+## Game feel, combos and badges
+
+Every correct answer plays a chime that climbs a pentatonic ladder as the streak
+grows. The play header shows `×2 WARM`, `×3 HOT`, `×4 ON FIRE` and
+`×5 UNSTOPPABLE`; tier-ups add a short flourish, star burst and callout. Music
+ducks briefly under important sounds. Wrong answers break the combo with a softer
+descending cue. All audio stays synthesized in the browser, so no sound files
+download.
+
+Question 8 of every round is a **golden question**, marked with a gold chip and
+card. A correct golden answer doubles its base, streak and speed award. It is still
+one mark out of eight. After a perfect 8/8, the result flow offers an optional
+**bonus shot**: one extra question worth +250 arcade points. A miss costs no points
+and no marks; declining it finishes the round immediately. Both mechanics can be
+turned off with **Settings → Game settings → Game extras**; marks never change
+either way.
+
+Players collect six badges: **First perfect**, **5-streak**, **Quick draw**
+(under two seconds), **Redemption hero**, **Golden hit** and **1,000 club**.
+Badges persist on this device, appear on the result card and show as small icons
+on the leaderboard. Existing saves migrate without them.
+
+Lite uses lightweight CSS feedback and a capped confetti burst, and respects the
+system reduced-motion preference by removing movement and particles while keeping
+colour and sound. Glass keeps the full celebration set.
+
 ## Scoring
 
 Correct answers earn 100 points, plus 25 for each preceding correct answer in the
@@ -242,10 +269,12 @@ settings, the leaderboard, the hidden browser tab and the face-loss pause stop
 the clock. Feedback and countdown time do not count toward the next question.
 Wrong answers earn no points and reset the streak. A successful redemption earns
 250 points plus the same speed bonus. A perfect main round earns another 300.
-Marks remain out of eight; speed affects arcade points and leaderboard totals.
-Each completed turn saves its speed bonus and per-question answer times locally,
-and the result screen shows the speed points included in the total. Existing saved
-scores remain unchanged.
+A correct golden question 8 doubles its award, including its speed share, and a
+made bonus shot adds 250 flat points. Marks remain out of eight; speed and bonuses
+affect arcade points and leaderboard totals only.
+Each completed turn saves its speed bonus, golden and bonus results, and
+per-question answer times locally. The result screen shows the speed points
+included in the total. Existing saved scores remain unchanged.
 
 ## Replay and stopping
 
@@ -281,7 +310,7 @@ covers redemption questions. Topic coverage and exact-question non-repetition ar
 preserved. Near exhaustion, the spacing rule relaxes rather than recycling content.
 Existing question IDs and used histories remain unchanged.
 
-Grammar level, answer mode, calibration, sound, leaderboard
+Grammar level, answer mode, calibration, sound, game extras, leaderboard
 frequency and session controls live in the Teacher Console. The player screen
 keeps large answers, hand tracking feedback and the instant hand-selection instruction.
 **Enable camera / Stop camera** stays in the game header; enabling it requests

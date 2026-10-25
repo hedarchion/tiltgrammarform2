@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261022-home-copy">
+  <link rel="stylesheet" href="styles.css?v=20261025-game-extras">
   <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-face-confirm" media="(min-width: 1101px) and (pointer: fine)">
-  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261022-desktop-lite" media="(max-width: 1100px), (pointer: coarse)">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261025-game-extras" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
   <div class="app" id="app">
@@ -151,11 +151,15 @@
           <div class="question-meta">
             <span class="meta-chip" id="questionCounter">QUESTION 1 / 8</span>
             <span class="meta-chip topic" id="questionTopic">TOPIC</span>
+            <span class="meta-chip golden hidden" id="goldenChip">GOLDEN ×2</span>
+            <span class="meta-chip combo hidden" id="comboChip">×2 WARM</span>
             <span class="meta-chip redemption" id="redemptionChip">REDEMPTION READY</span>
           </div>
           <div class="progress-dots" id="progressDots" aria-label="Round progress"></div>
           <div class="mobile-round-score"><span id="livePoints">0 points</span><span id="liveStreak">0 streak</span></div>
         </div>
+
+        <div class="golden-banner hidden" id="goldenBanner">GOLDEN QUESTION · DOUBLE POINTS</div>
 
         <div class="sentence-card" id="sentenceCard">
           <p id="sentence">Much people came to the feast.</p>
@@ -197,7 +201,7 @@
           </div>
           <div class="feedback-line" id="feedbackLine" aria-live="polite">Hold your tilt to lock in.</div>
         </div>
-        <p class="small-note speed-note">Correct answers earn up to +100 speed points. Faster answers earn more.</p>
+        <p class="small-note speed-note">Correct answers earn up to +100 speed points. Faster answers earn more. Question 8 is golden and doubles the award.</p>
       </section>
     </main>
 
@@ -216,6 +220,7 @@
         <div class="round-portrait" id="roundPortrait"></div>
         <div class="round-kicker">ROUND COMPLETE</div>
         <div class="round-name" id="roundName">Player</div>
+        <div class="round-best hidden" id="roundBest">NEW PERSONAL BEST</div>
         <div class="round-score"><span id="roundMarks">0</span><small>/ 8</small></div>
         <div class="round-stars" id="roundStars"></div>
         <div class="round-stats">
@@ -224,11 +229,25 @@
           <div><b id="roundRetries">0</b><span>REDEMPTIONS</span></div>
         </div>
         <p class="small-note" id="roundSpeedBonus">Includes +0 speed points</p>
+        <p class="small-note bonus-note hidden" id="roundBonusNote">Bonus shot +250 points</p>
+        <div class="round-badges hidden" id="roundBadges"></div>
         <div class="round-actions">
           <button class="btn ghost" id="replayPlayerBtn" type="button">PLAY AGAIN</button>
           <button class="btn primary" id="nextPlayerBtn" type="button">NEXT PLAYER</button>
         </div>
         <button class="stop-link" id="roundStopBtn" type="button">Stop game</button>
+      </div>
+    </div>
+
+    <div class="overlay bonus hidden" id="bonusOverlay" role="dialog" aria-modal="true" aria-labelledby="bonusTitle">
+      <div class="bonus-card">
+        <div class="bonus-kicker">PERFECT ROUND</div>
+        <h2 class="bonus-title" id="bonusTitle">BONUS SHOT?</h2>
+        <p class="bonus-sub">One extra question. A correct answer adds <b>+250 points</b>. Your 8/8 marks are already safe.</p>
+        <div class="round-actions bonus-actions">
+          <button class="btn ghost" id="bonusDeclineBtn" type="button">NO THANKS</button>
+          <button class="btn primary" id="bonusShotBtn" type="button">TAKE THE SHOT</button>
+        </div>
       </div>
     </div>
 
@@ -308,6 +327,8 @@
               <option value="buttons">Big buttons / arrow keys</option>
               <option value="tilt">Head tilt · optional</option>
             </select>
+            <button class="toggle on" id="extrasToggle" type="button" aria-pressed="true">GAME EXTRAS ON</button>
+            <p class="drawer-hint">Golden question 8 and the perfect-round bonus shot add arcade points only. Marks stay out of eight.</p>
         </details>
 
         <details class="drawer-section settings-group" open><summary>SESSION</summary>
@@ -325,7 +346,7 @@
 
         <details class="drawer-section settings-group"><summary>SOUND</summary>
           <div class="row">
-            <button class="toggle on" id="soundToggle" type="button">8-BIT SFX</button>
+            <button class="toggle on" id="soundToggle" type="button">CHIMES &amp; SFX</button>
             <button class="toggle on" id="musicToggle" type="button">MUSIC</button>
           </div>
         </details>
@@ -406,7 +427,7 @@
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
   <script src="palm-control.js?v=20261022-face-confirm"></script>
-  <script src="app.js?v=20261022-home-copy"></script>
+  <script src="app.js?v=20261025-game-extras"></script>
 
 </body>
 </html>
