@@ -36,6 +36,35 @@ shared across difficulty settings within each class or personal profile, so chan
 difficulty never makes a used question fresh. A smaller pool can run out sooner;
 select another difficulty or form to use its remaining questions.
 
+## Question Studio and custom homework
+
+Open **Settings → Question Studio** to browse every built-in question set and build
+your own grammar topics. Built-in Form 1 and Form 2 sets are read-only; duplicate
+one into **My topics**, or create a topic from scratch. Each custom topic has a
+name, a form level and its own question list.
+
+The question editor asks for the sentence before and after the blank, two answer
+options, which option is correct, and an optional explanation. It shows a live
+preview of the game card while you type. Questions can be edited or deleted at any
+time. Custom topics and their questions are saved in this browser's
+`localStorage`; nothing is uploaded.
+
+A custom topic can be sent as **custom homework** once it has at least eight
+questions. **Share homework** packs the set into the URL fragment as compact JSON,
+compresses it with the browser's `CompressionStream` when available, and encodes it
+with base64url. The recipient opens the whole link and gets a homework landing page,
+then plays an eight-question round drawn from the set. The link needs no database,
+account or backend. Older browsers fall back to an uncompressed link if compression
+is unavailable or unsupported.
+
+Homework runs in a temporary practice profile. It does not change the saved solo
+profile, class scores, leaderboard or used-question history. Replay draws eight
+fresh questions from the same link; leaving homework returns to the normal menu.
+Links can be long: a very large set may be awkward in chat apps that truncate URLs.
+The link builder caps a share at 60 questions; Question Studio caps a topic at 60
+questions and the browser at 40 custom topics. Because the homework payload is in
+the URL fragment, it is not sent to the web server when the page loads.
+
 ## Choose Glass or Lite
 
 One app includes two UI styles. Choose **Glass / Lite** on the home screen, or
@@ -154,14 +183,17 @@ on the HUD, countdown, results, player picker and leaderboard.
 
 ## Hosting and local data
 
-Serve this folder as a static site. Keep `index.html`, `app.js`, `questions.js`,
-`styles.css`, `glass.css`, `mobile.css`, `glass.js`, `vendor/face-api.min.js` and all tiny detector,
-68-point landmark and recognition model files under `models/`. Include
-`palm-control.js` and the complete `vendor/hands/` directory for palm controls. Published camera access requires HTTPS; localhost supports development.
+Serve this folder as a static site. Keep `index.html`, `app.js`, `homework.js`,
+`questions.js`, `styles.css`, `glass.css`, `mobile.css`, `glass.js`,
+`vendor/face-api.min.js` and all tiny detector, 68-point landmark and recognition
+model files under `models/`. Include `palm-control.js` and the complete
+`vendor/hands/` directory for palm controls. Published camera access requires
+HTTPS; localhost supports development.
 
 There is no backend or account. Class names, portraits, face descriptors, settings,
-scores and used-question IDs remain in browser localStorage. Only confirmed player
-registration or selection updates a profile. Video is never saved or uploaded.
+scores, used-question IDs and custom Question Studio topics remain in browser
+localStorage. Only confirmed player registration or selection updates a profile.
+Video is never saved or uploaded.
 Publishing the source does not publish browser records. The site address and browser
 profile must remain the same to resume: devices do not sync, a deployed site does
 not inherit localhost records, and clearing site data deletes these records. Private
@@ -175,6 +207,8 @@ Checks:
 - `node tests/tilt.test.cjs`
 - `node tests/player-flow.test.cjs`
 - `node tests/question-bank.test.cjs`
+- `node tests/homework.test.cjs`
+- `node tests/studio-homework.test.cjs`
 
 ## Form 1 grammar
 

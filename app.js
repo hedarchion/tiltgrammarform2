@@ -65,7 +65,10 @@ const STORAGE_KEY = "grammartilt_v2";
 const MODEL_URL = "models";
 const QUESTION_BANK = Array.isArray(window.BANK) ? window.BANK : [];
 const FORM1_BANK = Array.isArray(window.BANK_FORM1) ? window.BANK_FORM1 : [];
-function selectedForm(cls = getCurrentClass()) { return (cls ? cls.form : DB.defaultForm) === 1 ? 1 : 2; }
+function selectedForm(cls = getCurrentClass()) {
+  if (homeworkMode) return homeworkMode.form === 1 ? 1 : 2;
+  return (cls ? cls.form : DB.defaultForm) === 1 ? 1 : 2;
+}
 const DIFFICULTIES = {
   easy: { label: "Easy" },
   standard: { label: "Standard" },
@@ -82,10 +85,12 @@ const DIFFICULTY_TOPICS = {
   }
 };
 function selectedDifficulty(cls = getCurrentClass()) {
+  if (homeworkMode) return "standard";
   const value = cls ? cls.difficulty : DB.defaultDifficulty;
   return Object.hasOwn(DIFFICULTIES, value) ? value : "standard";
 }
 function selectedBank(cls = getCurrentClass()) {
+  if (homeworkMode) return homeworkMode.bank;
   const form = selectedForm(cls);
   const bank = form === 1 ? FORM1_BANK : QUESTION_BANK;
   const topics = DIFFICULTY_TOPICS[form][selectedDifficulty(cls)];
@@ -99,7 +104,8 @@ function changeDifficulty(value) {
   if (!saveDB()) target[key] = previous;
   refreshAll();
 }
-function isSolo() { return DB.playMode === "single"; }
+function isHomework() { return Boolean(homeworkMode); }
+function isSolo() { return Boolean(homeworkMode) || DB.playMode === "single"; }
 function changePlayMode(value) {
   if (session?.active || !["class", "single"].includes(value)) return;
   const previous = DB.playMode;
@@ -142,7 +148,7 @@ function answerPrompt() {
 }
 // The visible left/right actions are shared by touch and palm input.
 function palmControlContext() {
-  if (document.hidden || isTeacherOpen() || pendingFaceCapture
+  if (document.hidden || isTeacherOpen() || isStudioOpen() || isShareOpen() || pendingFaceCapture
     || !$("faceConfirmModal").classList.contains("hidden")
     || !$("playerLost").classList.contains("hidden")) return null;
   if (pendingFaceResume && !$("resumeConfirmModal").classList.contains("hidden")) return "face-resume";
@@ -198,6 +204,9 @@ const TRACKING_FRESH_MS = 450;
 const NEUTRAL_HOLD_MS = 180;
 const FACE_LOST_MS = 5000;
 const QUESTIONS_PER_ROUND = 8;
+const MAX_CUSTOM_TOPICS = 40;
+const MAX_CUSTOM_QUESTIONS = 60;
+const MAX_CUSTOM_TEXT = 500;
 const LEADERBOARD_INTERVAL = 3;
 const SPEED_BONUS_MAX = 100;
 const SPEED_BONUS_WINDOW_MS = 10000;
@@ -257,7 +266,8 @@ function studentById(id) {
 }
 
 function getCurrentClass() {
-  return isSolo() ? DB.solo : DB.activeClass ? DB.classes[DB.activeClass] || null : null;
+  if (homeworkMode) return homeworkMode.class;
+  return DB.playMode === "single" ? DB.solo : DB.activeClass ? DB.classes[DB.activeClass] || null : null;
 }
 
 function currentStudents() {
@@ -324,9 +334,65 @@ function normalizeStudent(raw) {
   };
 }
 
+function cleanCustomText(value, limit) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, limit || MAX_CUSTOM_TEXT);
+}
+
+function normalizeCustomQuestion(raw, topicId) {
+  const sentence = String(raw?.s ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CUSTOM_TEXT);
+  if (!sentence.includes("{x}") || !sentence.replace(/\{x\}/g, "").trim()) return null;
+  const fallbackOptions = [raw?.c, raw?.f];
+  const options = (Array.isArray(raw?.options) ? raw.options : fallbackOptions)
+    .map(value => cleanCustomText(value, 120)).slice(0, 2);
+  if (options.length !== 2 || !options[0] || !options[1] || options[0] === options[1]) return null;
+  const answer = raw?.answer === 1 ? 1 : 0;
+  return {
+    id: typeof raw?.id === "string" && raw.id.length < 100 ? raw.id : makeId("cq"),
+    patternId: typeof raw?.patternId === "string" && raw.patternId.length < 100
+      ? raw.patternId : `custom:${topicId}`,
+    s: sentence,
+    w: typeof raw?.w === "string" ? cleanCustomText(raw.w, 80) : "",
+    c: options[answer],
+    f: options[1 - answer],
+    options,
+    answer,
+    tip: cleanCustomText(raw?.tip, 400)
+  };
+}
+
+function normalizeCustomTopic(raw, index) {
+  if (!raw || typeof raw !== "object") return null;
+  const name = cleanCustomText(raw.name, 60);
+  if (!name) return null;
+  const rawId = typeof raw.id === "string" ? raw.id : "";
+  const id = /^[a-z0-9_-]{3,100}$/i.test(rawId) ? rawId : makeId("topic");
+  const questions = (Array.isArray(raw.questions) ? raw.questions : [])
+    .map(question => normalizeCustomQuestion(question, id))
+    .filter(Boolean)
+    .slice(0, MAX_CUSTOM_QUESTIONS);
+  return {
+    id,
+    name,
+    form: raw.form === 1 ? 1 : 2,
+    createdAt: Number(raw.createdAt) || Date.now() + index,
+    updatedAt: Number(raw.updatedAt) || Date.now(),
+    questions
+  };
+}
+
+function normalizeCustomTopics(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  return raw.map(normalizeCustomTopic).filter(topic => {
+    if (!topic || seen.has(topic.id)) return false;
+    seen.add(topic.id);
+    return true;
+  }).slice(0, MAX_CUSTOM_TOPICS);
+}
+
 function normalizeDB(raw) {
   const db = {
-    version: 8,
+    version: 9,
     playMode: raw?.playMode === "single" ? "single" : "class",
     defaultDifficulty: Object.hasOwn(DIFFICULTIES, raw?.defaultDifficulty) ? raw.defaultDifficulty : "standard",
     solo: { id: "solo", name: "Single player", form: raw?.solo?.form === 1 ? 1 : 2,
@@ -339,6 +405,7 @@ function normalizeDB(raw) {
     classes: {},
     settings: { ...defaultSettings },
     history: [],
+    customTopics: normalizeCustomTopics(raw?.customTopics),
     updatedAt: Date.now()
   };
   if (!raw || typeof raw !== "object") return db;
@@ -409,6 +476,16 @@ function saveDB() {
 }
 
 let DB = loadDB();
+let homeworkMode = null;
+let pendingHomework = null;
+let studioState = {
+  selected: "",
+  search: "",
+  topicDraft: null,
+  questionDraft: null,
+  shareUrl: ""
+};
+let studioBuiltinCache = null;
 
 let stream = null;
 let modelsReady = false;
@@ -471,8 +548,18 @@ function isTeacherOpen() {
   return document.body.classList.contains("teacher-open");
 }
 
+function isStudioOpen() {
+  return !$("studioOverlay").classList.contains("hidden");
+}
+
+function isShareOpen() {
+  return !$("shareOverlay").classList.contains("hidden");
+}
+
 function isUiBlocking() {
   return isTeacherOpen()
+    || isStudioOpen()
+    || isShareOpen()
     || !$("faceConfirmModal").classList.contains("hidden")
     || !$("resumeConfirmModal").classList.contains("hidden")
     || !$("countdownOverlay").classList.contains("hidden")
@@ -483,6 +570,8 @@ function isUiBlocking() {
 
 function isPlayBlocked() {
   return isTeacherOpen()
+    || isStudioOpen()
+    || isShareOpen()
     || !$("leaderboardOverlay").classList.contains("hidden")
     || !$("roundOverlay").classList.contains("hidden")
     || !$("bonusOverlay").classList.contains("hidden")
@@ -808,6 +897,10 @@ function setHudStudent(student, label) {
 
 function setHudClass() {
   const cls = getCurrentClass();
+  if (isHomework()) {
+    $("hudClass").textContent = "CUSTOM HOMEWORK · PRACTICE";
+    return;
+  }
   $("hudClass").textContent = cls ? `${cls.name.toUpperCase()} · ${DIFFICULTIES[selectedDifficulty()].label.toUpperCase()}` : "NO CLASS";
 }
 
@@ -857,7 +950,7 @@ function setStreak(value) {
 }
 
 function showScreen(name) {
-  ["lobby", "idle", "play"].forEach((screen) => {
+  ["lobby", "homework", "idle", "play"].forEach((screen) => {
     $(screen).classList.toggle("hidden", screen !== name);
   });
   document.body.classList.toggle("playing", name === "play");
@@ -1030,7 +1123,7 @@ function prepareFaceResume() {
   ensureDetectionLoop();
 }
 function faceTrackingNeeded() {
-  if (!stream || document.hidden || isTeacherOpen() || pendingFaceCapture) return false;
+  if (!stream || document.hidden || isTeacherOpen() || isStudioOpen() || isShareOpen() || pendingFaceCapture) return false;
   return phase === "idle" ? !isUiBlocking() && faceRecognitionRequested() && recognitionReady
     : controlMode() === "tilt" && (phase === "countdown" || phase === "play" && !round?.answered && !isPlayBlocked());
 }
@@ -1680,7 +1773,9 @@ function startSession() {
 }
 
 function stopSession() {
+  const wasHomework = isHomework();
   if (!session?.active) {
+    if (wasHomework) exitHomeworkMode();
     showLobby();
     return;
   }
@@ -1692,6 +1787,7 @@ function stopSession() {
   activeStudentId = null;
   clearGameTimers();
   hideGameOverlays();
+  if (wasHomework) exitHomeworkMode();
   showLobby();
   updateSessionHud();
   stopCamera();
@@ -2040,7 +2136,9 @@ function renderQuestion() {
 function sentenceMarkup(question) {
   const source = String(question.s || "");
   const word = String(question.w || "");
-  const tag = `<span class="error-word">${escapeHtml(word)}</span>`;
+  const tag = word
+    ? `<span class="error-word">${escapeHtml(word)}</span>`
+    : '<span class="blank-slot" aria-label="blank">___</span>';
   if (source.includes("{x}")) {
     return escapeHtml(source).replace("{x}", tag);
   }
@@ -2433,7 +2531,7 @@ function finishRound() {
     gained,
     form: selectedForm(),
     difficulty: selectedDifficulty(),
-    mode: isSolo() ? "single" : "class",
+    mode: isHomework() ? "homework" : isSolo() ? "single" : "class",
     total: QUESTIONS_PER_ROUND,
     points: round.points,
     speedBonus: round.speedBonus,
@@ -2444,24 +2542,26 @@ function finishRound() {
     newBest: round.newBest,
     redemption: round.redemption.active ? (redemptionWon ? "saved" : "missed") : "none"
   }].slice(-40);
-  DB.history.push({
-    at: Date.now(),
-    classId: getCurrentClass()?.id,
-    studentId: student.id,
-    gained,
-    form: selectedForm(),
-    difficulty: selectedDifficulty(),
-    mode: isSolo() ? "single" : "class",
-    total: QUESTIONS_PER_ROUND,
-    points: round.points,
-    speedBonus: round.speedBonus,
-    responseTimesMs: [...round.responseTimesMs],
-    best: round.best,
-    golden: Boolean(round.goldenHit),
-    bonus: round.bonus || "none",
-    redemption: redemptionWon ? "saved" : round.redemption.active ? "missed" : "none"
-  });
-  DB.history = DB.history.slice(-400);
+  if (!isHomework()) {
+    DB.history.push({
+      at: Date.now(),
+      classId: getCurrentClass()?.id,
+      studentId: student.id,
+      gained,
+      form: selectedForm(),
+      difficulty: selectedDifficulty(),
+      mode: isSolo() ? "single" : "class",
+      total: QUESTIONS_PER_ROUND,
+      points: round.points,
+      speedBonus: round.speedBonus,
+      responseTimesMs: [...round.responseTimesMs],
+      best: round.best,
+      golden: Boolean(round.goldenHit),
+      bonus: round.bonus || "none",
+      redemption: redemptionWon ? "saved" : round.redemption.active ? "missed" : "none"
+    });
+    DB.history = DB.history.slice(-400);
+  }
   session.rounds += 1;
   session.roundsSinceBoard += 1;
   lastFinishedId = student.id;
@@ -2536,6 +2636,11 @@ function leaveCompletedRound(replay) {
   if (phase !== "round" || !session?.active) return;
   if (isSolo() && !replay) { stopSession(); return; }
   const student = replay ? round.student : null;
+  if (replay && isHomework()) {
+    // Homework practice samples fresh questions from the shared set on each play.
+    if (Array.isArray(homeworkMode.class.usedQuestionIds)) homeworkMode.class.usedQuestionIds = [];
+    session.questionDeck = shuffledQuestions();
+  }
   if (replay && unusedQuestionCount() < QUESTIONS_PER_ROUND) {
     toast("No full round remains at this difficulty. Choose another difficulty or grammar level.", "warn", 6000);
     stopSession();
@@ -2629,7 +2734,7 @@ function animatePodium() {
 }
 
 function showLeaderboard(options) {
-  if (isSolo()) return;
+  if (isSolo() || phase === "homework") return;
   if (pendingFaceResume) {
     resumeBlockedStudentId = pendingFaceResume.studentId;
     closeFaceResumeConfirmation();
@@ -2720,11 +2825,730 @@ function closeTeacherPanel() {
   syncTracking();
 }
 
+function studioTopicKey(topic) {
+  return `custom|${topic.id}`;
+}
+
+function studioSets() {
+  const custom = DB.customTopics.map(topic => ({
+    ...topic,
+    key: studioTopicKey(topic),
+    custom: true
+  }));
+  if (!studioBuiltinCache) {
+    const builtinMap = new Map();
+    const addBuiltin = (form, bank) => {
+      bank.forEach(question => {
+        const key = `builtin|${form}|${question.topic}`;
+        if (!builtinMap.has(key)) {
+          builtinMap.set(key, {
+            key,
+            id: key,
+            custom: false,
+            name: question.topic,
+            form,
+            questions: []
+          });
+        }
+        builtinMap.get(key).questions.push(question);
+      });
+    };
+    addBuiltin(1, FORM1_BANK);
+    addBuiltin(2, QUESTION_BANK);
+    studioBuiltinCache = [...builtinMap.values()];
+  }
+  return { custom, builtin: studioBuiltinCache };
+}
+
+function findStudioSet(key) {
+  const sets = studioSets();
+  return sets.custom.find(set => set.key === key) || sets.builtin.find(set => set.key === key) || null;
+}
+
+function findCustomTopic(id) {
+  return DB.customTopics.find(topic => topic.id === id) || null;
+}
+
+function commitCustomTopics(nextTopics) {
+  const previous = DB.customTopics;
+  DB.customTopics = nextTopics;
+  if (!saveDB()) {
+    DB.customTopics = previous;
+    toast("Could not save the question set. Browser storage may be full.", "bad", 6000);
+    return false;
+  }
+  return true;
+}
+
+function uniqueCustomName(base, ignoringId) {
+  const clean = cleanCustomText(base, 56) || "Custom topic";
+  const taken = new Set(DB.customTopics.filter(topic => topic.id !== ignoringId).map(topic => topic.name.toLowerCase()));
+  if (!taken.has(clean.toLowerCase())) return clean;
+  for (let number = 2; number < 100; number += 1) {
+    const suffix = ` ${number}`;
+    const candidate = `${clean.slice(0, 60 - suffix.length)}${suffix}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${clean.slice(0, 51)} copy`;
+}
+
+function composeStudioSentence(before, after) {
+  const left = cleanCustomText(before, MAX_CUSTOM_TEXT).replace(/\{x\}/gi, "").trim();
+  const right = cleanCustomText(after, MAX_CUSTOM_TEXT).replace(/\{x\}/gi, "").trim();
+  if (!left && !right) return "";
+  if (!right) return `${left} {x}`;
+  if (!left) return `{x}${/^[,.;:!?)]/.test(right) ? "" : " "}${right}`;
+  return `${left} {x}${/^[,.;:!?)]/.test(right) ? "" : " "}${right}`;
+}
+
+function studioPreviewMarkup(before, after, optionA, optionB, correct, tip) {
+  const sentence = composeStudioSentence(before, after);
+  const options = [cleanCustomText(optionA, 120) || "Option A", cleanCustomText(optionB, 120) || "Option B"];
+  const answer = Number(correct) === 1 ? 1 : 0;
+  return `<div class="studio-preview-card">
+    <div class="studio-preview-kicker">LIVE PREVIEW</div>
+    <p class="studio-preview-sentence">${sentenceMarkup({ s: sentence || "{x}", w: "" })}</p>
+    <div class="studio-preview-options">
+      ${options.map((option, index) => `<span class="${index === answer ? "correct" : ""}"><b>${index === 0 ? "A" : "B"}</b>${escapeHtml(option)}${index === answer ? "<i>correct</i>" : ""}</span>`).join("")}
+    </div>
+    ${cleanCustomText(tip, 400) ? `<p class="studio-preview-tip">${escapeHtml(cleanCustomText(tip, 400))}</p>` : ""}
+  </div>`;
+}
+
+function updateStudioPreview() {
+  const preview = $("studioQPreview");
+  if (!preview) return;
+  preview.innerHTML = studioPreviewMarkup(
+    $("studioQBefore")?.value,
+    $("studioQAfter")?.value,
+    $("studioQOptionA")?.value,
+    $("studioQOptionB")?.value,
+    $("studioQCorrect")?.value,
+    $("studioQTip")?.value
+  );
+}
+
+function renderStudioTopicDraft() {
+  const draft = studioState.topicDraft;
+  const editing = Boolean(draft.id);
+  return `<div class="studio-panel studio-topic-editor">
+    <div class="studio-panel-kicker">${editing ? "EDIT GRAMMAR TOPIC" : "NEW GRAMMAR TOPIC"}</div>
+    <h3>${editing ? "Name this set" : "Start a question set"}</h3>
+    <p class="studio-panel-note">A grammar topic is a set of questions. Build at least eight complete questions to share it as custom homework.</p>
+    <div class="studio-form-grid">
+      <label class="studio-field wide">TOPIC NAME
+        <input class="text-input" id="studioTopicName" type="text" maxlength="60" value="${escapeHtml(draft.name)}" placeholder="e.g. Past Simple — extra practice" autocomplete="off">
+      </label>
+      <label class="studio-field">GRAMMAR LEVEL
+        <select class="select" id="studioTopicForm">
+          <option value="1" ${draft.form === 1 ? "selected" : ""}>Form 1</option>
+          <option value="2" ${draft.form === 2 ? "selected" : ""}>Form 2</option>
+        </select>
+      </label>
+    </div>
+    <div class="studio-panel-actions">
+      <button class="btn primary compact" type="button" data-action="save-topic">SAVE TOPIC</button>
+      <button class="btn ghost compact" type="button" data-action="cancel-topic">CANCEL</button>
+    </div>
+  </div>`;
+}
+
+function renderStudioQuestionEditor(set, draft) {
+  return `<div class="studio-panel studio-question-editor">
+    <div class="studio-panel-kicker">${draft.id ? "EDIT QUESTION" : "NEW QUESTION"}</div>
+    <h3>${draft.id ? "Change this question" : "Write the next question"}</h3>
+    <div class="studio-form-grid">
+      <label class="studio-field">BEFORE THE BLANK
+        <textarea class="text-input" id="studioQBefore" rows="2" maxlength="500" placeholder="Aina">${escapeHtml(draft.before)}</textarea>
+      </label>
+      <label class="studio-field">AFTER THE BLANK
+        <textarea class="text-input" id="studioQAfter" rows="2" maxlength="500" placeholder="to the library yesterday.">${escapeHtml(draft.after)}</textarea>
+      </label>
+      <label class="studio-field">OPTION A
+        <input class="text-input" id="studioQOptionA" type="text" maxlength="120" value="${escapeHtml(draft.optionA)}" placeholder="walked" autocomplete="off">
+      </label>
+      <label class="studio-field">OPTION B
+        <input class="text-input" id="studioQOptionB" type="text" maxlength="120" value="${escapeHtml(draft.optionB)}" placeholder="walking" autocomplete="off">
+      </label>
+      <label class="studio-field">CORRECT ANSWER
+        <select class="select" id="studioQCorrect">
+          <option value="0" ${draft.correct === 0 ? "selected" : ""}>Option A</option>
+          <option value="1" ${draft.correct === 1 ? "selected" : ""}>Option B</option>
+        </select>
+      </label>
+      <label class="studio-field">EXPLANATION · OPTIONAL
+        <input class="text-input" id="studioQTip" type="text" maxlength="400" value="${escapeHtml(draft.tip)}" placeholder="Use the past simple for a completed action." autocomplete="off">
+      </label>
+    </div>
+    <div id="studioQPreview">${studioPreviewMarkup(draft.before, draft.after, draft.optionA, draft.optionB, draft.correct, draft.tip)}</div>
+    <div class="studio-panel-actions">
+      <button class="btn primary compact" type="button" data-action="save-question">SAVE QUESTION</button>
+      <button class="btn ghost compact" type="button" data-action="cancel-question">CANCEL</button>
+    </div>
+  </div>`;
+}
+
+function renderStudioQuestionCard(set, question, index) {
+  const options = Array.isArray(question.options) ? question.options : [];
+  return `<article class="studio-q-card">
+    <div class="studio-q-number">#${index + 1}</div>
+    <div class="studio-q-sentence">${sentenceMarkup(question)}</div>
+    <div class="studio-q-options">
+      ${options.map((option, optionIndex) => `<span class="${optionIndex === question.answer ? "correct" : ""}"><b>${optionIndex === 0 ? "A" : "B"}</b>${escapeHtml(option)}${optionIndex === question.answer ? "<i>correct</i>" : ""}</span>`).join("")}
+    </div>
+    ${question.tip ? `<p class="studio-q-tip">${escapeHtml(question.tip)}</p>` : ""}
+    ${set.custom ? `<div class="studio-q-actions">
+      <button class="btn mini" type="button" data-action="edit-question" data-question-id="${escapeHtml(question.id)}">EDIT</button>
+      <button class="btn mini danger" type="button" data-action="delete-question" data-question-id="${escapeHtml(question.id)}">DELETE</button>
+    </div>` : ""}
+  </article>`;
+}
+
+function renderStudioMain() {
+  if (studioState.topicDraft) return renderStudioTopicDraft();
+  const set = findStudioSet(studioState.selected);
+  if (!set) {
+    return `<div class="studio-empty">
+      <div class="studio-empty-mark">+</div>
+      <h3>No question set selected</h3>
+      <p>Create a custom grammar topic, or open a built-in set to browse its questions.</p>
+      <button class="btn primary" type="button" data-action="new-topic">CREATE A TOPIC</button>
+    </div>`;
+  }
+  const questions = set.questions || [];
+  const shareDisabled = !set.custom || questions.length < QUESTIONS_PER_ROUND;
+  const editor = set.custom && studioState.questionDraft
+    ? renderStudioQuestionEditor(set, studioState.questionDraft)
+    : "";
+  return `<div class="studio-main-head">
+    <div>
+      <div class="studio-eyebrow">${set.custom ? "MY GRAMMAR TOPIC" : "BUILT-IN QUESTION SET"} · FORM ${set.form}</div>
+      <h3>${escapeHtml(set.name)}</h3>
+      <p>${questions.length} question${questions.length === 1 ? "" : "s"}${set.custom ? " · stored in this browser" : " · read-only"}</p>
+    </div>
+    <div class="studio-head-actions">
+      ${set.custom ? `
+        <button class="btn mini" type="button" data-action="edit-topic">EDIT TOPIC</button>
+        <button class="btn mini danger" type="button" data-action="delete-topic">DELETE</button>
+        <button class="btn mini primary" type="button" data-action="share-topic" ${shareDisabled ? "disabled" : ""}>SHARE HOMEWORK</button>
+      ` : `<button class="btn mini primary" type="button" data-action="duplicate-set">DUPLICATE TO MY TOPICS</button>`}
+    </div>
+  </div>
+  <div class="studio-set-stats">
+    <span><b>${questions.length}</b> questions</span>
+    <span><b>8</b> per homework round</span>
+    <span><b>${MAX_CUSTOM_QUESTIONS}</b> max per topic</span>
+  </div>
+  ${!set.custom ? `<p class="studio-readonly-note">Built-in sets are read-only. Duplicate one to make an editable copy, or create your own topic from scratch.</p>` : ""}
+  ${set.custom && questions.length < QUESTIONS_PER_ROUND ? `<p class="studio-readonly-note hot">Add ${QUESTIONS_PER_ROUND - questions.length} more complete question${QUESTIONS_PER_ROUND - questions.length === 1 ? "" : "s"} to unlock the homework link.</p>` : ""}
+  ${editor}
+  ${set.custom ? `<div class="studio-question-toolbar">
+    <div><b>QUESTIONS</b><span>${questions.length} / ${MAX_CUSTOM_QUESTIONS}</span></div>
+    <button class="btn primary compact" type="button" data-action="new-question" ${questions.length >= MAX_CUSTOM_QUESTIONS ? "disabled" : ""}>+ ADD QUESTION</button>
+  </div>` : `<div class="studio-question-toolbar"><div><b>QUESTIONS</b><span>${questions.length} in this set</span></div></div>`}
+  <div class="studio-question-list">
+    ${questions.length ? questions.map((question, index) => renderStudioQuestionCard(set, question, index)).join("") : `<div class="studio-empty small"><p>This topic has no questions yet. Add the first one to get started.</p>${set.custom ? '<button class="btn primary compact" type="button" data-action="new-question">+ ADD FIRST QUESTION</button>' : ""}</div>`}
+  </div>`;
+}
+
+function renderStudio() {
+  if (!$("studioOverlay")) return;
+  const sets = studioSets();
+  if (!studioState.selected || !findStudioSet(studioState.selected)) {
+    studioState.selected = sets.custom[0]?.key || sets.builtin[0]?.key || "";
+  }
+  const search = studioState.search.toLowerCase();
+  const matches = set => !search || set.name.toLowerCase().includes(search);
+  const custom = sets.custom.filter(matches);
+  const builtin = sets.builtin.filter(matches);
+  $("studioTopicList").innerHTML = `
+    <div class="studio-list-label">MY TOPICS <span>${sets.custom.length}</span></div>
+    ${custom.length ? custom.map(set => `<button class="studio-topic ${studioState.selected === set.key ? "active" : ""}" type="button" data-studio-key="${escapeHtml(set.key)}">
+      <span class="studio-topic-name">${escapeHtml(set.name)}</span>
+      <span class="studio-topic-meta">${set.questions.length} Q · FORM ${set.form}</span>
+    </button>`).join("") : `<p class="studio-list-hint">${studioState.search ? "No custom topics match." : "No custom topics yet."}</p>`}
+    <div class="studio-list-label">BUILT-IN SETS <span>${sets.builtin.length}</span></div>
+    ${builtin.length ? builtin.map(set => `<button class="studio-topic ${studioState.selected === set.key ? "active" : ""}" type="button" data-studio-key="${escapeHtml(set.key)}">
+      <span class="studio-topic-name">${escapeHtml(set.name)}</span>
+      <span class="studio-topic-meta">${set.questions.length} Q · FORM ${set.form}</span>
+    </button>`).join("") : `<p class="studio-list-hint">No built-in sets match.</p>`}
+  `;
+  $("studioMain").innerHTML = renderStudioMain();
+}
+
+function openStudio() {
+  if (session?.active) {
+    toast("Stop the current game before opening Question Studio.", "warn", 4200);
+    return;
+  }
+  closeTeacherPanel();
+  pauseQuestionTimer();
+  studioState.search = $("studioSearch")?.value || studioState.search;
+  renderStudio();
+  $("studioOverlay").classList.remove("hidden");
+  $("studioOverlay").setAttribute("aria-hidden", "false");
+  $("studioSearch").value = studioState.search;
+  syncTracking();
+  $("studioCloseBtn").focus();
+}
+
+function closeStudio() {
+  $("studioOverlay").classList.add("hidden");
+  $("studioOverlay").setAttribute("aria-hidden", "true");
+  $("shareOverlay").classList.add("hidden");
+  studioState.topicDraft = null;
+  studioState.questionDraft = null;
+  studioState.shareUrl = "";
+  syncTracking();
+}
+
+function startNewStudioTopic() {
+  studioState.topicDraft = { id: "", name: "", form: selectedForm() };
+  studioState.questionDraft = null;
+  renderStudio();
+  $("studioTopicName")?.focus();
+}
+
+function editStudioTopic() {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  const topic = findCustomTopic(set.id);
+  if (!topic) return;
+  studioState.topicDraft = { id: topic.id, name: topic.name, form: topic.form };
+  studioState.questionDraft = null;
+  renderStudio();
+  $("studioTopicName")?.focus();
+}
+
+function saveStudioTopic() {
+  const draft = studioState.topicDraft;
+  if (!draft) return;
+  const name = uniqueCustomName($("studioTopicName")?.value, draft.id);
+  const form = Number($("studioTopicForm")?.value) === 1 ? 1 : 2;
+  if (!cleanCustomText($("studioTopicName")?.value, 60)) {
+    toast("Give the topic a name first.", "warn");
+    $("studioTopicName")?.focus();
+    return;
+  }
+  const now = Date.now();
+  let next;
+  if (draft.id) {
+    const current = findCustomTopic(draft.id);
+    if (!current) return;
+    next = DB.customTopics.map(topic => topic.id === draft.id
+      ? { ...topic, name, form, updatedAt: now } : topic);
+  } else {
+    if (DB.customTopics.length >= MAX_CUSTOM_TOPICS) {
+      toast(`You can keep up to ${MAX_CUSTOM_TOPICS} custom topics.`, "warn");
+      return;
+    }
+    const topic = { id: makeId("topic"), name, form, createdAt: now, updatedAt: now, questions: [] };
+    next = [...DB.customTopics, topic];
+    studioState.selected = studioTopicKey(topic);
+  }
+  if (!commitCustomTopics(next)) return;
+  studioState.topicDraft = null;
+  renderStudio();
+  toast(draft.id ? "Topic updated." : "Topic created. Add its first question.", "good");
+}
+
+function deleteStudioTopic() {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  if (!window.confirm(`Delete "${set.name}" and all of its questions?`)) return;
+  const next = DB.customTopics.filter(topic => topic.id !== set.id);
+  if (!commitCustomTopics(next)) return;
+  studioState.selected = "";
+  studioState.questionDraft = null;
+  renderStudio();
+  toast("Topic deleted.", "warn");
+}
+
+function duplicateStudioSet() {
+  const set = findStudioSet(studioState.selected);
+  if (!set || set.custom) return;
+  if (DB.customTopics.length >= MAX_CUSTOM_TOPICS) {
+    toast(`You can keep up to ${MAX_CUSTOM_TOPICS} custom topics.`, "warn");
+    return;
+  }
+  const topicId = makeId("topic");
+  const questions = set.questions.slice(0, MAX_CUSTOM_QUESTIONS).map(question => {
+    const normalized = normalizeCustomQuestion({ ...question, w: "" }, topicId);
+    if (!normalized) return null;
+    return { ...normalized, id: makeId("cq"), patternId: `custom:${topicId}` };
+  }).filter(Boolean);
+  if (!questions.length) {
+    toast("This set does not contain editable question data.", "warn");
+    return;
+  }
+  const topic = {
+    id: topicId,
+    name: uniqueCustomName(`${set.name} copy`),
+    form: set.form,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    questions
+  };
+  if (!commitCustomTopics([...DB.customTopics, topic])) return;
+  studioState.selected = studioTopicKey(topic);
+  studioState.topicDraft = null;
+  studioState.questionDraft = null;
+  renderStudio();
+  const copiedNote = questions.length < set.questions.length ? ` (the first ${questions.length} of ${set.questions.length})` : "";
+  toast(`Copied ${questions.length} questions into your topics${copiedNote}.`, "good", 4600);
+}
+
+function startStudioQuestion() {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  if (set.questions.length >= MAX_CUSTOM_QUESTIONS) {
+    toast(`A topic can hold up to ${MAX_CUSTOM_QUESTIONS} questions.`, "warn");
+    return;
+  }
+  studioState.topicDraft = null;
+  studioState.questionDraft = { id: "", before: "", after: "", optionA: "", optionB: "", correct: 0, tip: "" };
+  renderStudio();
+  $("studioQBefore")?.focus();
+}
+
+function editStudioQuestion(questionId) {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  const topic = findCustomTopic(set.id);
+  const question = topic?.questions.find(item => item.id === questionId);
+  if (!question) return;
+  const pieces = question.s.split("{x}");
+  studioState.topicDraft = null;
+  studioState.questionDraft = {
+    id: question.id,
+    before: pieces[0] || "",
+    after: pieces.slice(1).join("{x}") || "",
+    optionA: question.options?.[0] || "",
+    optionB: question.options?.[1] || "",
+    correct: question.answer === 1 ? 1 : 0,
+    tip: question.tip || ""
+  };
+  renderStudio();
+  $("studioQBefore")?.focus();
+}
+
+function saveStudioQuestion() {
+  const set = findStudioSet(studioState.selected);
+  const draft = studioState.questionDraft;
+  if (!set?.custom || !draft) return;
+  const topic = findCustomTopic(set.id);
+  if (!topic) return;
+  const before = $("studioQBefore")?.value || "";
+  const after = $("studioQAfter")?.value || "";
+  const sentence = composeStudioSentence(before, after);
+  if (!sentence) {
+    toast("Add the sentence around the blank.", "warn");
+    $("studioQBefore")?.focus();
+    return;
+  }
+  if (sentence.length > MAX_CUSTOM_TEXT) {
+    toast(`Keep the complete sentence under ${MAX_CUSTOM_TEXT} characters.`, "warn", 4200);
+    $("studioQAfter")?.focus();
+    return;
+  }
+  const optionA = cleanCustomText($("studioQOptionA")?.value, 120);
+  const optionB = cleanCustomText($("studioQOptionB")?.value, 120);
+  if (!optionA || !optionB) {
+    toast("Both answer options are needed.", "warn");
+    (!optionA ? $("studioQOptionA") : $("studioQOptionB"))?.focus();
+    return;
+  }
+  if (optionA.toLowerCase() === optionB.toLowerCase()) {
+    toast("The two options must be different.", "warn");
+    $("studioQOptionB")?.focus();
+    return;
+  }
+  if (topic.questions.some(question => question.id !== draft.id && question.s.toLowerCase() === sentence.toLowerCase())) {
+    toast("That sentence is already in this topic.", "warn");
+    return;
+  }
+  const answer = Number($("studioQCorrect")?.value) === 1 ? 1 : 0;
+  const options = [optionA, optionB];
+  const question = {
+    id: draft.id || makeId("cq"),
+    patternId: `custom:${topic.id}`,
+    s: sentence,
+    w: "",
+    c: options[answer],
+    f: options[1 - answer],
+    options,
+    answer,
+    tip: cleanCustomText($("studioQTip")?.value, 400)
+  };
+  let questions;
+  if (draft.id) {
+    questions = topic.questions.map(item => item.id === draft.id ? question : item);
+  } else {
+    if (topic.questions.length >= MAX_CUSTOM_QUESTIONS) {
+      toast(`A topic can hold up to ${MAX_CUSTOM_QUESTIONS} questions.`, "warn");
+      return;
+    }
+    questions = [...topic.questions, question];
+  }
+  const next = DB.customTopics.map(item => item.id === topic.id
+    ? { ...item, questions, updatedAt: Date.now() } : item);
+  if (!commitCustomTopics(next)) return;
+  studioState.questionDraft = null;
+  renderStudio();
+  toast(draft.id ? "Question updated." : "Question added.", "good");
+}
+
+function deleteStudioQuestion(questionId) {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  const topic = findCustomTopic(set.id);
+  const question = topic?.questions.find(item => item.id === questionId);
+  if (!question) return;
+  if (!window.confirm("Delete this question?")) return;
+  const next = DB.customTopics.map(item => item.id === topic.id
+    ? { ...item, questions: item.questions.filter(entry => entry.id !== questionId), updatedAt: Date.now() } : item);
+  if (!commitCustomTopics(next)) return;
+  if (studioState.questionDraft?.id === questionId) studioState.questionDraft = null;
+  renderStudio();
+  toast("Question deleted.", "warn");
+}
+
+async function openHomeworkShare() {
+  const set = findStudioSet(studioState.selected);
+  if (!set?.custom) return;
+  if (set.questions.length < QUESTIONS_PER_ROUND) {
+    toast(`Add at least ${QUESTIONS_PER_ROUND} questions before sharing.`, "warn");
+    return;
+  }
+  const codec = window.HomeworkCodec;
+  if (!codec) {
+    toast("The homework link builder did not load.", "bad", 5000);
+    return;
+  }
+  try {
+    const token = await codec.encode({
+      title: set.name,
+      topic: set.name,
+      form: set.form,
+      questions: set.questions
+    });
+    const href = typeof location !== "undefined" ? location.href : "";
+    const url = codec.shareUrl(href, token);
+    const packed = Math.min(set.questions.length, codec.MAX_QUESTIONS);
+    studioState.shareUrl = url;
+    $("shareTitle").textContent = `${set.name} homework`;
+    $("shareMeta").textContent = `${packed} question${packed === 1 ? "" : "s"} packed into the link${packed < set.questions.length ? ` (the first ${packed})` : ""}.`;
+    $("shareLink").value = url;
+    $("shareLength").textContent = `${url.length.toLocaleString()} characters · no server or account needed`;
+    $("shareOverlay").classList.remove("hidden");
+    $("shareLink").focus();
+    $("shareLink").select?.();
+  } catch (error) {
+    toast(error?.message || "Could not build the homework link.", "bad", 6000);
+  }
+}
+
+async function copyShareLink() {
+  const link = $("shareLink")?.value || "";
+  if (!link) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(link);
+    else {
+      $("shareLink").focus();
+      $("shareLink").select();
+      document.execCommand?.("copy");
+    }
+    toast("Homework link copied.", "good");
+  } catch {
+    $("shareLink").focus();
+    $("shareLink").select();
+    toast("Select the link and copy it manually.", "warn", 4200);
+  }
+}
+
+function previewShareLink() {
+  if (!studioState.shareUrl) return;
+  const opened = window.open?.(studioState.shareUrl, "_blank", "noopener");
+  if (!opened) toast("Open the copied link in a new tab to preview it.", "warn", 4200);
+}
+
+function closeShare() {
+  $("shareOverlay").classList.add("hidden");
+  if (isStudioOpen()) $("studioCloseBtn")?.focus();
+}
+
+function buildHomeworkQuestions(set) {
+  const batch = makeId("hw");
+  return set.questions.map((question, index) => {
+    const options = [...question.options];
+    const answer = question.answer === 1 ? 1 : 0;
+    return {
+      id: `${batch}_${index}`,
+      patternId: `homework:${batch}`,
+      topic: set.topic,
+      s: question.s,
+      w: "",
+      c: options[answer],
+      f: options[1 - answer],
+      options,
+      answer,
+      tip: question.tip || ""
+    };
+  });
+}
+
+async function loadHomeworkFromHash() {
+  if (typeof location === "undefined" || !window.HomeworkCodec) return;
+  const token = window.HomeworkCodec.tokenFromLocation(location.href);
+  if (!token) return;
+  if (session?.active) {
+    toast("Finish the current game before opening a homework link.", "warn", 4200);
+    return;
+  }
+  try {
+    const set = await window.HomeworkCodec.decode(token);
+    pendingHomework = {
+      title: set.title,
+      topic: set.topic,
+      form: set.form,
+      questions: buildHomeworkQuestions(set)
+    };
+    renderHomeworkLanding();
+    closeTeacherPanel();
+    closeStudio();
+    hideGameOverlays();
+    hideLeaderboard();
+    phase = "homework";
+    showScreen("homework");
+    setHudStudent(null);
+    $("hudClass").textContent = "CUSTOM HOMEWORK · READY";
+    updateSessionHud();
+  } catch (error) {
+    pendingHomework = null;
+    clearHomeworkHash();
+    toast(error?.message || "That homework link could not be opened.", "bad", 6000);
+    showLobby();
+  }
+}
+
+function renderHomeworkLanding() {
+  if (!pendingHomework) return;
+  const count = pendingHomework.questions.length;
+  $("homeworkTitle").textContent = pendingHomework.title;
+  $("homeworkTopic").textContent = pendingHomework.topic;
+  $("homeworkCount").textContent = String(count);
+  $("homeworkForm").textContent = `FORM ${pendingHomework.form}`;
+  const ready = count >= QUESTIONS_PER_ROUND;
+  $("homeworkStartBtn").disabled = !ready;
+  $("homeworkSaveBtn").disabled = false;
+  $("homeworkStatus").textContent = ready
+    ? `Ready · ${count} question${count === 1 ? "" : "s"} in this set`
+    : `This link needs at least ${QUESTIONS_PER_ROUND} complete questions to start.`;
+}
+
+function startHomework() {
+  if (!pendingHomework) return;
+  if (pendingHomework.questions.length < QUESTIONS_PER_ROUND) {
+    toast(`This homework needs at least ${QUESTIONS_PER_ROUND} questions.`, "warn");
+    return;
+  }
+  const set = pendingHomework;
+  homeworkMode = {
+    title: set.title,
+    topic: set.topic,
+    form: set.form,
+    bank: set.questions,
+    class: {
+      id: "homework",
+      name: "Custom homework",
+      form: set.form,
+      difficulty: "standard",
+      createdAt: Date.now(),
+      students: [normalizeStudent({ id: "homework_player", numbered: true })],
+      leaderboardRanks: {},
+      usedQuestionIds: []
+    }
+  };
+  startSession();
+  if (!session?.active) {
+    homeworkMode = null;
+    renderHomeworkLanding();
+    showScreen("homework");
+  }
+}
+
+function savePendingHomework() {
+  if (!pendingHomework) return;
+  if (DB.customTopics.length >= MAX_CUSTOM_TOPICS) {
+    toast(`You can keep up to ${MAX_CUSTOM_TOPICS} custom topics.`, "warn");
+    return;
+  }
+  const topicId = makeId("topic");
+  const name = uniqueCustomName(pendingHomework.title || pendingHomework.topic);
+  const questions = pendingHomework.questions.slice(0, MAX_CUSTOM_QUESTIONS).map(question => {
+    const normalized = normalizeCustomQuestion({ ...question, w: "" }, topicId);
+    return normalized ? { ...normalized, id: makeId("cq"), patternId: `custom:${topicId}` } : null;
+  }).filter(Boolean);
+  if (!questions.length) {
+    toast("This homework has no usable questions.", "bad");
+    return;
+  }
+  const topic = {
+    id: topicId,
+    name,
+    form: pendingHomework.form,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    questions
+  };
+  if (!commitCustomTopics([...DB.customTopics, topic])) return;
+  toast(`Saved "${name}" to your topics.`, "good", 4200);
+  $("homeworkSaveBtn").disabled = true;
+}
+
+function clearHomeworkHash() {
+  if (typeof location === "undefined" || typeof history === "undefined") return;
+  if (!location.hash && !/[?&](homework|hw)=/.test(location.search)) return;
+  try {
+    const url = new URL(location.href);
+    url.hash = "";
+    url.searchParams.delete("homework");
+    url.searchParams.delete("hw");
+    history.replaceState(null, "", `${url.pathname}${url.search}`);
+  } catch {
+    // Keep the link intact if a browser blocks history updates (for example file URLs).
+  }
+}
+
+function exitHomeworkMode() {
+  homeworkMode = null;
+  pendingHomework = null;
+  clearHomeworkHash();
+}
+
+function closeHomeworkLanding() {
+  exitHomeworkMode();
+  showLobby();
+}
+
+async function handleHomeworkHashChange() {
+  if (session?.active) return;
+  const token = typeof location !== "undefined" && window.HomeworkCodec
+    ? window.HomeworkCodec.tokenFromLocation(location.href) : "";
+  if (!token) {
+    if (pendingHomework && !$("homework").classList.contains("hidden")) closeHomeworkLanding();
+    return;
+  }
+  await loadHomeworkFromHash();
+}
+
 function bindEvents() {
   document.addEventListener("pointerdown", ensureAudio, { capture: true });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      if (isTeacherOpen()) closeTeacherPanel();
+      if (isShareOpen()) closeShare();
+      else if (isStudioOpen()) closeStudio();
+      else if (isTeacherOpen()) closeTeacherPanel();
       else if (pendingFaceResume) { event.preventDefault(); declineFaceResume(); }
       else if (pendingFaceCapture) closeFaceConfirmation();
       else if (!document.querySelector("#leaderboardOverlay").classList.contains("hidden")) closeLeaderboard();
@@ -2892,6 +3716,51 @@ function bindEvents() {
   });
   $("resetMarksBtn").addEventListener("click", resetMarks);
   $("deleteClassBtn").addEventListener("click", deleteClass);
+  $("openStudioBtn").addEventListener("click", openStudio);
+  $("studioCloseBtn").addEventListener("click", closeStudio);
+  $("studioNewTopicBtn").addEventListener("click", startNewStudioTopic);
+  $("studioSearch").addEventListener("input", () => {
+    studioState.search = $("studioSearch").value;
+    renderStudio();
+  });
+  $("studioTopicList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-studio-key]");
+    if (!button) return;
+    studioState.selected = button.dataset.studioKey;
+    studioState.topicDraft = null;
+    studioState.questionDraft = null;
+    renderStudio();
+  });
+  $("studioMain").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
+    if (action === "new-topic") startNewStudioTopic();
+    else if (action === "edit-topic") editStudioTopic();
+    else if (action === "delete-topic") deleteStudioTopic();
+    else if (action === "duplicate-set") duplicateStudioSet();
+    else if (action === "new-question") startStudioQuestion();
+    else if (action === "edit-question") editStudioQuestion(button.dataset.questionId);
+    else if (action === "delete-question") deleteStudioQuestion(button.dataset.questionId);
+    else if (action === "save-topic") saveStudioTopic();
+    else if (action === "cancel-topic") { studioState.topicDraft = null; renderStudio(); }
+    else if (action === "save-question") saveStudioQuestion();
+    else if (action === "cancel-question") { studioState.questionDraft = null; renderStudio(); }
+    else if (action === "share-topic") openHomeworkShare();
+  });
+  const studioPreviewEvents = ["studioQBefore", "studioQAfter", "studioQOptionA", "studioQOptionB", "studioQCorrect", "studioQTip"];
+  for (const type of ["input", "change"]) {
+    $("studioMain").addEventListener(type, (event) => {
+      if (studioPreviewEvents.includes(event.target.id)) updateStudioPreview();
+    });
+  }
+  $("shareCopyBtn").addEventListener("click", copyShareLink);
+  $("shareCloseBtn").addEventListener("click", closeShare);
+  $("sharePreviewBtn").addEventListener("click", previewShareLink);
+  $("homeworkStartBtn").addEventListener("click", startHomework);
+  $("homeworkSaveBtn").addEventListener("click", savePendingHomework);
+  $("homeworkCloseBtn").addEventListener("click", closeHomeworkLanding);
+  window.addEventListener?.("hashchange", handleHomeworkHashChange);
   $("lostContinueBtn").addEventListener("click", () => {
     lostContinueUntil = Date.now() + 60000;
     hideLost();
@@ -2923,6 +3792,7 @@ function init() {
   refreshAll();
   renderControlMode();
   showLobby();
+  loadHomeworkFromHash();
 }
 
 init();

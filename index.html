@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261025-palm-cue-fix">
+  <link rel="stylesheet" href="styles.css?v=20261025-question-studio">
   <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-face-confirm" media="(min-width: 1101px) and (pointer: fine)">
-  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261025-game-extras" media="(max-width: 1100px), (pointer: coarse)">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261025-question-studio" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
   <div class="app" id="app">
@@ -119,6 +119,26 @@
           </div>
         </div>
         <footer class="developer-credit">Developed by Mr Ashraf@MES</footer>
+      </section>
+
+      <section class="screen homework hidden" id="homework" aria-labelledby="homeworkTitle">
+        <div class="homework-card">
+          <div class="homework-kicker">CUSTOM HOMEWORK</div>
+          <h2 class="homework-title" id="homeworkTitle">Grammar practice</h2>
+          <div class="homework-topic" id="homeworkTopic">A question set shared by your teacher</div>
+          <div class="homework-stats">
+            <div><b id="homeworkCount">8</b><span>QUESTIONS</span></div>
+            <div><b id="homeworkForm">FORM 2</b><span>GRAMMAR LEVEL</span></div>
+            <div><b>8</b><span>PER ROUND</span></div>
+          </div>
+          <p class="homework-note">This practice set travels inside the link. Nothing is uploaded and no account is needed. Each round draws eight questions from the set.</p>
+          <div class="homework-actions">
+            <button class="btn primary" id="homeworkStartBtn" type="button">START HOMEWORK</button>
+            <button class="btn ghost" id="homeworkSaveBtn" type="button">SAVE TO MY TOPICS</button>
+            <button class="btn ghost compact" id="homeworkCloseBtn" type="button">NOT NOW</button>
+          </div>
+          <p class="small-note" id="homeworkStatus"></p>
+        </div>
       </section>
 
       <section class="screen idle hidden" id="idle">
@@ -331,6 +351,11 @@
             <p class="drawer-hint">Golden question 8 and the perfect-round bonus shot add arcade points only. Marks stay out of eight.</p>
         </details>
 
+        <details class="drawer-section settings-group" open><summary>QUESTION STUDIO</summary>
+          <button class="btn mini primary" id="openStudioBtn" type="button">OPEN QUESTION STUDIO</button>
+          <p class="drawer-hint">View every built-in set, build custom grammar topics, and share a homework link that carries its questions in the URL.</p>
+        </details>
+
         <details class="drawer-section settings-group" open><summary>SESSION</summary>
           <div class="row">
             <button class="btn mini primary" id="startSessionBtn" type="button">START</button>
@@ -397,6 +422,49 @@
       </div>
     </aside>
 
+    <div class="overlay studio hidden" id="studioOverlay" role="dialog" aria-modal="true" aria-labelledby="studioTitle">
+      <div class="studio-card">
+        <div class="studio-head">
+          <div>
+            <div class="studio-kicker">QUESTION STUDIO</div>
+            <h2 class="studio-title" id="studioTitle">Build your own grammar sets</h2>
+          </div>
+          <button class="drawer-close" id="studioCloseBtn" type="button" aria-label="Close question studio">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div class="studio-layout">
+          <aside class="studio-sidebar">
+            <button class="btn primary compact" id="studioNewTopicBtn" type="button">+ NEW TOPIC</button>
+            <label class="studio-search" for="studioSearch">
+              <span>SEARCH SETS</span>
+              <input class="text-input" id="studioSearch" type="search" placeholder="Search topic names" autocomplete="off">
+            </label>
+            <div class="studio-topic-list" id="studioTopicList"></div>
+          </aside>
+          <div class="studio-main" id="studioMain"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay share hidden" id="shareOverlay" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+      <div class="share-card">
+        <div class="studio-kicker">CUSTOM HOMEWORK</div>
+        <h2 class="share-title" id="shareTitle">Share this question set</h2>
+        <p class="share-meta" id="shareMeta">The questions are packed into the link.</p>
+        <div class="share-link-row">
+          <input class="text-input" id="shareLink" type="text" readonly aria-label="Homework link">
+          <button class="btn primary compact" id="shareCopyBtn" type="button">COPY</button>
+        </div>
+        <p class="share-length" id="shareLength"></p>
+        <div class="share-actions">
+          <button class="btn ghost" id="sharePreviewBtn" type="button">OPEN PREVIEW</button>
+          <button class="btn ghost" id="shareCloseBtn" type="button">CLOSE</button>
+        </div>
+        <p class="small-note">No server is involved. Keep the whole link intact when you paste it into a message or classroom post.</p>
+      </div>
+    </div>
+
     <div class="overlay hidden" id="resumeConfirmModal" role="dialog" aria-modal="true" aria-labelledby="resumeConfirmTitle">
       <div class="round-card resume-confirm-card">
         <h2 id="resumeConfirmTitle">Play this player?</h2>
@@ -427,7 +495,8 @@
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
   <script src="palm-control.js?v=20261022-face-confirm"></script>
-  <script src="app.js?v=20261025-game-extras"></script>
+  <script src="homework.js?v=20261025-question-studio"></script>
+  <script src="app.js?v=20261025-question-studio"></script>
 
 </body>
 </html>
