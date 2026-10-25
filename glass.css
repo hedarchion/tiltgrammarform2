@@ -185,3 +185,82 @@ select option { background: #19354c; color: #fff; }
   outline-offset: 3px;
 }
 .drawer .select:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Switcher treatment adapted from the linked liquid-glass control. */
+.game-modes, .appearance-options {
+  position: relative;
+  isolation: isolate;
+  gap: 0;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / .22);
+  border-radius: 999px;
+  background: rgb(185 194 207 / .12);
+  -webkit-backdrop-filter: blur(9px) saturate(1.45);
+  backdrop-filter: blur(9px) saturate(1.45);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / .38),
+    inset 1px 2px 2px -2px rgb(255 255 255 / .6),
+    inset 0 -2px 3px -2px rgb(0 12 28 / .35),
+    0 5px 14px rgb(0 10 25 / .12);
+}
+.game-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mode-choice, .appearance-choice {
+  position: relative;
+  z-index: 1;
+  border-radius: 999px;
+  transition: color 160ms ease, transform 140ms cubic-bezier(.23, 1, .32, 1);
+}
+.mode-choice:active, .appearance-choice:active { transform: scale(.97); }
+@supports selector(:has(*)) {
+  .game-modes::before, .appearance-options::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: 5px;
+    bottom: 5px;
+    left: 5px;
+    width: calc((100% - 10px) / 2);
+    border-radius: inherit;
+    background: rgb(234 246 252 / .62);
+    -webkit-backdrop-filter: blur(8px) saturate(1.35);
+    backdrop-filter: blur(8px) saturate(1.35);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / .25),
+      inset 1px 2px 1px -1px rgb(255 255 255 / .78),
+      inset -1px -2px 1px -1px rgb(255 255 255 / .46),
+      inset 0 -5px 5px -5px rgb(0 14 30 / .32),
+      0 3px 8px rgb(0 12 25 / .18);
+    transition: transform 260ms cubic-bezier(.32, .72, 0, 1);
+  }
+  .game-modes:has(#singleModeBtn[aria-pressed="true"])::before,
+  .appearance-options:has(#liteAppearanceBtn[aria-pressed="true"])::before { transform: translateX(100%); }
+  .mode-choice[aria-pressed="true"], .appearance-choice[aria-pressed="true"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: #102238;
+  }
+}
+
+.hud-btn, .btn:not(.primary):not(.camera), .toggle, .manual-chip {
+  border-color: rgb(255 255 255 / .27);
+  background: linear-gradient(160deg, rgb(255 255 255 / .16), rgb(255 255 255 / .045)), rgb(13 32 51 / .28);
+  -webkit-backdrop-filter: blur(9px) saturate(1.4);
+  backdrop-filter: blur(9px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / .48),
+    inset 1px 2px 1px -2px rgb(255 255 255 / .72),
+    inset -1px -2px 1px -2px rgb(255 255 255 / .35),
+    inset 0 -4px 5px -4px rgb(0 11 29 / .28),
+    0 4px 12px rgb(0 10 25 / .13);
+}
+.btn.primary, .btn.camera {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / .85),
+    inset 1px 2px 1px -2px #fff,
+    inset 0 -4px 5px -4px rgb(0 35 33 / .3),
+    0 5px 14px rgb(0 10 25 / .16);
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-modes::before, .appearance-options::before { transition: none; }
+}

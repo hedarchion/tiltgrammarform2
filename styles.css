@@ -1291,28 +1291,27 @@ body .resume-confirm-card { width:min(400px,100%); max-width:400px; }
 @keyframes golden-banner-in { from { opacity: 0; transform: translateY(-8px) scale(.94); } to { opacity: 1; transform: none; } }
 
 .play.golden-question .sentence-card {
-  border-color: #ffe6a6;
-  background: linear-gradient(165deg, rgba(255, 244, 205, .88) 0%, rgba(255, 221, 145, .6) 55%, rgba(255, 246, 214, .8) 100%);
-  box-shadow: 0 0 0 3px rgba(255,209,102,.22), 0 24px 70px rgba(2,8,30,.35), inset 0 1px 1px rgba(255,255,255,.9);
+  border-color: #f2c15d;
+  background: linear-gradient(165deg, #30230f, #101723 72%);
+  box-shadow: 0 0 0 3px rgba(242,193,93,.2), 0 24px 70px rgba(2,8,30,.35), inset 0 1px 1px rgba(255,255,255,.28);
 }
-.play.golden-question .sentence-card p { color: #3b2500; }
 .play.bonus-question .sentence-card {
   border-color: #f2c15d;
   background: linear-gradient(165deg, #30230f, #101723 72%);
   box-shadow: 0 0 0 3px rgba(242,193,93,.2), 0 24px 70px rgba(2,8,30,.35), inset 0 1px 1px rgba(255,255,255,.28);
 }
-.play.bonus-question #sentence,
-.play.bonus-question #sentence .error-word,
-.play.bonus-question #sentence .blank-slot {
+.play:is(.golden-question, .bonus-question) #sentence,
+.play:is(.golden-question, .bonus-question) #sentence .error-word,
+.play:is(.golden-question, .bonus-question) #sentence .blank-slot {
   color: transparent;
-  background: linear-gradient(108deg, #7a4a08 0%, #f2c15d 18%, #fff4b8 24%, #b87014 36%, #f6d66d 51%, #8e560b 68%, #fff0a2 76%, #c98218 100%) 0 0 / 230% 100%;
+  background: linear-gradient(108deg, #bd7924 0%, #f2c15d 18%, #fff4c8 24%, #d89533 36%, #f6d66d 51%, #c58227 68%, #fff0b2 76%, #e6a844 100%) 0 0 / 230% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 1px 0 rgba(255,244,184,.28), 0 9px 20px rgba(0,0,0,.36);
   animation: fx-foil 3.1s ease-in-out infinite;
 }
-.play.bonus-question #sentence .error-word {
+.play:is(.golden-question, .bonus-question) #sentence .error-word {
   text-decoration-color: #ff9b67;
 }
 

@@ -101,7 +101,7 @@
   .meta-chip.golden { font:900 10px var(--body); color:#3b2500; padding:3px 8px; border-radius:999px; }
   .meta-chip.combo { font:900 10px var(--body); padding:3px 8px; border-radius:999px; }
   .golden-banner { display:none; }
-  .play.golden-question .sentence-card { background:#f7e5ae; }
+  .play.golden-question .sentence-card { background:#1b2028; border:1px solid #f2c15d; }
   .play.bonus-question .sentence-card { background:#1b2028; border:1px solid #f2c15d; }
   .point-pop { font-size:18px; top:50%; }
   .progress-dots { gap:4px; }
