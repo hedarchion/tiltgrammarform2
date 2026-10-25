@@ -59,7 +59,7 @@ use the same immediate left/right palm selection and optional camera controls.
 ## Palm navigation
 
 With Camera on and palm controls selected, the same hand gestures navigate the game.
-The answer cards show mirrored hand illustrations with L/R markers. Result actions
+The answer cards show anatomical left/right palm illustrations with L/R markers. Result actions
 stay in the same spatial order: left replays the same player, right continues
 to the next player (or returns to the solo menu). On player entry, left opens ranks and right
 starts a new numbered player. On ranks, right returns to the game. On the home

@@ -1217,7 +1217,7 @@ body.theme-glass .roster-pill { padding: 8px; }
   -webkit-mask: url("palm.svg") center / contain no-repeat;
   mask: url("palm.svg") center / contain no-repeat;
 }
-.palm-left::before, .palm-nav[data-palm="left"]::before { transform: scaleX(-1); }
+.palm-right::before, .palm-nav[data-palm="right"]::before { transform: scaleX(-1); }
 .palm-cue::after { content: attr(data-hand); font: 900 11px var(--body); }
 body .option-tag:has(.palm-cue) { line-height: 1; }
 .palm-nav::before { display: none; }

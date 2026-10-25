@@ -2,7 +2,12 @@ const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = readFileSync('index.html', 'utf8');
+const css = readFileSync('styles.css', 'utf8');
 const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
+const palmFlip = css.match(/\.palm-(left|right)::before,\s*\.palm-nav\[data-palm="(left|right)"\]::before\s*\{\s*transform:\s*scaleX\(-1\);\s*\}/);
+assert.ok(palmFlip, 'palm cues define one mirrored side');
+assert.equal(palmFlip[1], 'right', 'the unflipped base illustration is the left palm');
+assert.equal(palmFlip[2], 'right', 'right palm navigation uses the mirrored illustration');
 for (const id of ['formSelect','controlModeSelect','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle']) {
   assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
   assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
