@@ -92,10 +92,7 @@ body.camera-on .camera-layer::after { display: none; }
 .option-card.left { background: var(--glass-fill), rgb(16 64 71 / .24); }
 .option-card.right { background: var(--glass-fill), rgb(59 47 66 / .24); }
 .option-card:hover { transform: none; background: var(--glass-fill), rgb(255 255 255 / .08); }
-.option-card.tilt-target {
-  border-color: rgb(255 255 255 / .85);
-  box-shadow: var(--glass-shadow), 0 0 0 2px rgb(219 246 255 / .26), 0 0 34px rgb(164 222 255 / .16);
-}
+
 .option-card.good { background: var(--glass-fill), rgb(10 120 81 / .66); box-shadow: var(--glass-shadow), 0 0 0 2px var(--good); }
 .option-card.bad { background: var(--glass-fill), rgb(148 30 59 / .7); box-shadow: var(--glass-shadow), 0 0 0 2px var(--bad); }
 .option-card:active { transform: scale(.98); }

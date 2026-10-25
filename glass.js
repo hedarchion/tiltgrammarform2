@@ -37,26 +37,28 @@ window.GlassRenderer = (() => {
         vec2 normal;
         if (max(q.x, q.y) > 0.) normal = normalize(max(q, .0001)) * sign(p);
         else normal = q.x > q.y ? vec2(sign(p.x), 0.) : vec2(0., sign(p.y));
-        float edgeWidth = min(30., min(panel.z, panel.w) * .19);
-        float t = clamp(-distance / edgeWidth, 0., 1.);
-        // Cross-section of a convex glass edge. Snell's law, IOR 1.46.
-        float slope = (1. - t) / sqrt(max(t * (2. - t), .035));
-        vec3 surfaceNormal = normalize(vec3(normal * slope * .72, 1.));
-        vec3 ray = refract(vec3(0., 0., -1.), surfaceNormal, 1. / 1.46);
-        vec2 bend = ray.xy / max(.2, -ray.z) * 38.;
-        vec2 point = panel.xy + local + bend - p * .012;
-        // A small optical softness retains visible detail, unlike frosted blur.
-        vec3 colour = sampleScene(point) * .52;
-        colour += (sampleScene(point + vec2(1.2, 0.)) + sampleScene(point - vec2(1.2, 0.))
-          + sampleScene(point + vec2(0., 1.2)) + sampleScene(point - vec2(0., 1.2))) * .12;
-        // Very slight dispersion at the bevel, where displacement is strongest.
-        colour.r = mix(colour.r, sampleScene(point + normal * (1. - t) * .8).r, .3);
-        colour.b = mix(colour.b, sampleScene(point - normal * (1. - t) * .8).b, .3);
-        colour = mix(colour, vec3(.035, .085, .14), .18) + feedback;
-        float rim = exp(-max(0., -distance) / 1.35);
+        // The linked CodePen's sixth-power rounded lens is fitted to each card.
+        vec2 lensCoord = p / max(panel.zw * .5 - vec2(radius * .28), vec2(1.));
+        float roundedBox = pow(abs(lensCoord.x), 6.) + pow(abs(lensCoord.y), 6.);
+        float lensBody = clamp(1. - roundedBox * .72, 0., 1.);
+        float edgeWidth = min(28., min(panel.z, panel.w) * .22);
+        float edge = 1. - smoothstep(0., edgeWidth, -distance);
+        // A broad central magnification and a stronger curved bevel produce
+        // the CodePen lens movement while keeping text on top of the canvas.
+        vec2 bend = -p * (.045 * lensBody) + normal * edge * 13.;
+        vec2 point = panel.xy + local + bend;
+        vec3 colour = sampleScene(point) * .32;
+        for (int x = -1; x <= 1; x++) {
+          for (int y = -1; y <= 1; y++) {
+            colour += sampleScene(point + vec2(float(x), float(y)) * 1.7) * (.68 / 9.);
+          }
+        }
+        float innerBand = exp(-pow((-distance - 5.) / 3.5, 2.));
+        float outerBand = exp(-pow((-distance - 1.) / 1.6, 2.));
+        float gradient = .08 + .17 * clamp(.5 - p.y / max(panel.w, 1.), 0., 1.);
         float light = .25 + .75 * pow(max(0., dot(normal, normalize(vec2(-.65, -.76)))), 3.);
-        float caustic = exp(-pow((-distance - 5.) / 3.4, 2.)) * .07;
-        colour += rim * light * .38 + caustic;
+        colour = mix(colour, vec3(.035, .085, .14), .12) + feedback;
+        colour += outerBand * light * .34 + innerBand * gradient;
         gl_FragColor = vec4(colour, 1.);
       }`;
     function compile(type, source) {

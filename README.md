@@ -1,5 +1,19 @@
 # Palm2Grammar
 
+## Private palm debugging
+
+Open the app with `?palmdebug=1` appended to its URL (before any `#` fragment),
+then turn on the camera and choose palm controls. This reveals a private testing
+section under **Settings → Palm controls**. **Test my palm** freezes one picture;
+choose **I raised left/right** to compare your hand with the model's reading.
+During a round, every palm answer also keeps the camera frame that triggered it.
+Open Settings to view each frame and download a JSON report containing the images,
+landmarks, model labels, question options, chosen side, and answer key. The five most
+recent wrong answers are also kept in this tab's session storage, so a reload
+does not erase their question and scoring details. A camera frame is included when
+one was available. Closing the tab clears that short history. Download the report
+and share it for visual review of a disputed answer.
+
 Live app: https://hedarchion.github.io/tiltgrammarform2/
 
 A static classroom game with a Form 1/Form 2 selector: 1,000 easy Form 1 questions
@@ -122,14 +136,15 @@ expandable settings groups. Glass remains available at any screen size.
 ## Less background work
 
 - Lite has no decorative WebGL renderer, canvas refraction or permanent app animation loop. Glass is an explicit higher-power visual option.
-- No tracking-library or model downloads on startup or during ordinary button play.
-- Palm mode loads only the hand engine. Head tilt loads the detector and landmarks;
-  face recognition loads separately when **Capture & Play** requests it.
+- The camera starts on a secure origin when enabled. The hand engine loads for palm
+  controls; face recognition loads only when photo matching is requested.
+- Palm mode loads only the hand engine. Face recognition loads separately when
+  **Capture & Play** requests it.
 - Idle numbered-player screens do not run face recognition. Settings and hidden
   tabs stop tracking callbacks. Answer feedback stops palm inference once the hand
   has been lowered/closed, and the next question resumes it immediately.
-- Camera capture requests 640×360 at up to 30 fps, rather than 1280×720. Palm
-  classification still runs on fresh camera frames without a confirmation timer;
+- Camera capture requests 640×360 at up to 30 fps. Palm
+  classification confirms the same hand across two fresh camera frames;
   only preview painting is capped at 12 fps. Hidden previews are not painted.
 - Lite keeps the power saving renderer off, but now uses cheap CSS-only celebrations: chimes, combo labels, answer card feedback, callouts and a capped confetti burst. It still skips full-screen camera compositing, backdrop blur and full-screen flashes.
 
@@ -204,7 +219,6 @@ Local server: `python3 -m http.server 8766`.
 Checks:
 
 - `node tests/glass-renderer.test.cjs`
-- `node tests/tilt.test.cjs`
 - `node tests/player-flow.test.cjs`
 - `node tests/question-bank.test.cjs`
 - `node tests/homework.test.cjs`
@@ -226,11 +240,16 @@ Each topic has five constructions with twenty named contexts. Rebuild using
 
 ## Classroom controls
 
-Open-palm control is the default; choose buttons/arrow keys or optional head tilt
+On a secure origin such as `localhost` or HTTPS, the app starts the camera when it
+opens and the browser asks for access if needed. The browser remembers the permission;
+the app remembers whether you last left the camera on or switched it off. If camera
+access is denied or unavailable, buttons and arrow keys continue to work.
+
+Open-palm control is the default; choose buttons/arrow keys
 under **Settings → Game settings → Answer controls**. Raise your physical left
 hand for the left answer or your right hand for the right answer, anywhere in the
-camera frame. The first detected, sufficiently visible open palm with a left/right
-classification submits immediately. There is no hold duration, confirmation dwell,
+camera frame. Two consecutive detections of the same sufficiently visible open palm
+submit an answer. There is no hold duration,
 or position guide. Old saved palm-hold durations are discarded during settings
 migration. The mirrored preview shows landmarks and identifies each hand.
 
@@ -346,7 +365,7 @@ Existing question IDs and used histories remain unchanged.
 
 Grammar level, answer mode, calibration, sound, game extras, leaderboard
 frequency and session controls live in the Teacher Console. The player screen
-keeps large answers, hand tracking feedback and the instant hand-selection instruction.
+keeps large answers and hand tracking feedback.
 **Enable camera / Stop camera** stays in the game header; enabling it requests
 browser camera permission when needed.
 
@@ -460,18 +479,12 @@ B. Open-palm gestures
 - Process camera frames locally in the browser.
 - Show a mirrored preview with visible landmarks and physical left/right hand labels.
 - Left hand selects the left answer; right hand selects the right answer, anywhere in frame.
-- Select on the first recognised open palm, without a hold timer.
+- Select after two consecutive frames agree on the hand, without a hold timer.
 - Correct handedness labels for the model's mirror convention.
 - Require a lower/closed hand before another answer, without a timed release delay.
 - Block selection when two open palms are visible or hand identity is uncertain.
 - Ignore hands too small to identify reliably and show useful guidance.
 - Prevent a continuously raised palm from answering the next question.
-
-C. Optional head tilt
-- Calibrate the neutral head position during the countdown.
-- Tilt left or right and hold to confirm.
-- Include adjustable sensitivity, hold duration, recalibration, and direction inversion.
-- Require a return to neutral before another answer.
 
 Buttons must remain available when gesture tracking struggles. Camera failure must never prevent ordinary button play.
 
@@ -531,8 +544,7 @@ Put teacher controls in a side drawer:
 - Select answer mode
 - Start and stop sessions
 - Set leaderboard frequency
-- Explain instant palm selection and adjust tilt settings
-- Recalibrate tracking
+- Explain palm selection
 - Toggle music and sound effects
 - Reset scores
 - View remaining question counts and camera/model status
@@ -594,7 +606,7 @@ Build the actual app, not just a visual mockup. All visible controls must work.
 Implement in stages:
 1. Complete button-based classroom gameplay and persistence.
 2. Add polished results, leaderboard, and teacher settings.
-3. Add palm control and optional head tilt.
+3. Add palm control.
 4. Add optional photo recognition.
 5. Expand and validate the question banks.
 

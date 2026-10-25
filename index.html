@@ -7,10 +7,10 @@
   <title>Palm2Grammar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261025-question-studio">
-  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261022-face-confirm" media="(min-width: 1101px) and (pointer: fine)">
-  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261025-question-studio" media="(max-width: 1100px), (pointer: coarse)">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600&family=Nunito:wght@700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20261025-lobby-brand">
+  <link rel="stylesheet" id="glassThemeStyles" href="glass.css?v=20261025-no-tilt-foil" media="(min-width: 1101px) and (pointer: fine)">
+  <link rel="stylesheet" id="liteThemeStyles" href="mobile.css?v=20261025-lobby-brand" media="(max-width: 1100px), (pointer: coarse)">
 </head>
 <body>
   <div class="app" id="app">
@@ -25,14 +25,7 @@
     <div class="callout" id="callout" aria-live="polite"></div>
 
     <header class="hud">
-      <div class="face-card" id="faceCard">
-        <div class="face-avatar" id="hudAvatar">?</div>
-        <div class="face-copy">
-          <div class="hud-kicker">READY TO PLAY</div>
-          <div class="hud-name" id="hudName">Waiting for player</div>
-        </div>
-        <span class="cam-dot" id="camDot" title="Camera status"></span>
-      </div>
+      <div class="hud-brand" id="hudBrand" aria-hidden="true">Palm2Grammar</div>
 
       <div class="hud-center">
         <span class="hud-chip" id="hudClass">NO CLASS</span>
@@ -192,18 +185,9 @@
             <span class="option-charge"><i></i></span>
           </button>
 
-          <div class="tilt-meter" id="tiltMeter">
-            <div class="palm-monitor">
-              <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored preview identifying your left or right hand"></canvas>
-              <div id="palmStatus" role="status">Tap Camera for instant palm controls</div>
-              <small id="palmInstantHint">Lower your palm between choices</small>
-            </div>
-            <div class="tilt-arrow left" id="tiltArrowLeft">◀</div>
-            <div class="tilt-ring">
-              <div class="tilt-needle" id="tiltNeedle"></div>
-            </div>
-            <div class="tilt-arrow right" id="tiltArrowRight">▶</div>
-            <div class="tilt-caption" id="tiltCaption">HOLD A TILT</div>
+          <div class="palm-monitor">
+            <canvas id="palmPreview" width="320" height="180" aria-label="Mirrored preview identifying your left or right hand"></canvas>
+            <div id="palmStatus" role="status">Camera is starting…</div>
           </div>
 
           <button class="option-card right" id="optionRight" type="button" data-side="1">
@@ -214,12 +198,7 @@
         </div>
 
         <div class="play-footer">
-          <div class="tilt-gauge">
-            <span class="gauge-side left">L</span>
-            <div class="gauge-track"><div class="gauge-center"></div><div class="gauge-needle" id="gaugeNeedle"></div></div>
-            <span class="gauge-side right">R</span>
-          </div>
-          <div class="feedback-line" id="feedbackLine" aria-live="polite">Hold your tilt to lock in.</div>
+          <div class="feedback-line" id="feedbackLine" aria-live="polite"></div>
         </div>
         <p class="small-note speed-note">Correct answers earn up to +100 speed points. Faster answers earn more. Question 8 is golden and doubles the award.</p>
       </section>
@@ -262,7 +241,7 @@
     <div class="overlay bonus hidden" id="bonusOverlay" role="dialog" aria-modal="true" aria-labelledby="bonusTitle">
       <div class="bonus-card">
         <div class="bonus-kicker">PERFECT ROUND</div>
-        <h2 class="bonus-title" id="bonusTitle">BONUS SHOT?</h2>
+        <h2 class="bonus-title fx-foil" id="bonusTitle">BONUS SHOT?</h2>
         <p class="bonus-sub">One extra question. A correct answer adds <b>+250 points</b>. Your 8/8 marks are already safe.</p>
         <div class="round-actions bonus-actions">
           <button class="btn ghost" id="bonusDeclineBtn" type="button">NO THANKS</button>
@@ -343,9 +322,8 @@
             </select>
             <label for="controlModeSelect" class="panel-label">ANSWER CONTROLS</label>
             <select class="select" id="controlModeSelect">
-              <option value="palms">Open palm · instant left / right hand</option>
+              <option value="palms">Open palm · left / right hand</option>
               <option value="buttons">Big buttons / arrow keys</option>
-              <option value="tilt">Head tilt · optional</option>
             </select>
             <button class="toggle on" id="extrasToggle" type="button" aria-pressed="true">GAME EXTRAS ON</button>
             <p class="drawer-hint">Golden question 8 and the perfect-round bonus shot add arcade points only. Marks stay out of eight.</p>
@@ -363,7 +341,6 @@
           </div>
           <div class="row">
             <button class="btn mini class-only" id="showLbBtn" type="button">SHOW RANKS</button>
-            <button class="btn mini" id="calibrateBtn" type="button">RECALIBRATE</button>
           </div>
           <p class="drawer-hint class-only">Ranks appear after every 3 completed turns.</p>
           <button class="toggle class-only" id="faceResumeToggle" type="button" aria-pressed="true">FACE RESUME ON</button>
@@ -377,33 +354,28 @@
         </details>
 
         <details class="drawer-section settings-group"><summary>PALM CONTROLS</summary>
-          <p class="drawer-hint">Open palm = instant choice, anywhere in frame. Left selects left; right selects right. Results: left plays again; right goes to the next player or menu. Player entry: right starts a numbered player. Ranks: right returns. Lower or close your hand between choices.</p>
-        </details>
-
-        <details class="drawer-section settings-group"><summary>TILT CONTROLS</summary>
-          <label class="field">Tilt angle
-            <select class="select" id="tiltSensitivity" aria-label="Tilt sensitivity">
-              <option value="8">Small movement · 8°</option>
-              <option value="12">Comfortable · 12°</option>
-              <option value="18">Deliberate · 18°</option>
-              <option value="24">Large movement · 24°</option>
-            </select>
-          </label>
-          <label class="field">Hold to confirm
-            <select class="select" id="tiltHold" aria-label="Tilt hold duration">
-              <option value="350">Quick · 0.35 seconds</option>
-              <option value="550">Standard · 0.55 seconds</option>
-              <option value="850">Steady · 0.85 seconds</option>
-              <option value="1200">Careful · 1.2 seconds</option>
-            </select>
-          </label>
-          <div class="row">
-            <button class="toggle" id="invertTiltToggle" type="button">NORMAL</button>
+          <p class="drawer-hint">Raise one open palm anywhere in frame. Left selects left; right selects right. Lower or close your hand between choices.</p>
+          <div class="palm-debug">
+            <div class="row">
+              <button class="btn mini primary" id="palmDebugBtn" type="button">TEST MY PALM</button>
+            </div>
+            <div class="palm-log">
+              <div class="panel-label">LAST ROUND PALM LOG</div>
+              <ol id="palmLogList"><li>Play a round to record what the tracker saw for each answer.</li></ol>
+              <button class="btn mini" id="palmDebugDownload" type="button" disabled>DOWNLOAD DEBUG REPORT</button>
+            </div>
+            <p class="drawer-hint">Raise one open palm, tap the button, then tell us which hand you raised. The frozen picture shows what the tracker saw and why it picked a side.</p>
+            <canvas id="palmDebugCanvas" class="hidden" width="480" height="270" aria-label="Frozen palm test picture"></canvas>
+            <p class="palm-debug-result" id="palmDebugResult"></p>
+            <div class="row hidden" id="palmDebugConfirmRow">
+              <button class="btn mini" id="palmDebugLeft" type="button">I RAISED LEFT</button>
+              <button class="btn mini" id="palmDebugRight" type="button">I RAISED RIGHT</button>
+            </div>
+            <p class="palm-debug-verdict" id="palmDebugVerdict"></p>
           </div>
-          <p class="drawer-hint">Start upright, tilt towards an answer, then return to centre before the next choice. Use RECALIBRATE if your position changes. Swap directions if the controls feel mirrored.</p>
         </details>
 
-        <details class="drawer-section settings-group"><summary>CAMERA &amp; HEAD TRACKING</summary>
+        <details class="drawer-section settings-group"><summary>CAMERA &amp; FACE MATCHING</summary>
           <div class="row">
             <button class="btn mini" id="reloadModelsBtn" type="button">RELOAD FACE ENGINE</button>
           </div>
@@ -494,9 +466,9 @@
 
   <script src="questions.js?v=20261020-camera-control"></script>
   <script src="questions-form1.js?v=20261020-camera-control"></script>
-  <script src="palm-control.js?v=20261022-face-confirm"></script>
+  <script src="palm-control.js?v=20261025-no-tilt-foil"></script>
   <script src="homework.js?v=20261025-question-studio"></script>
-  <script src="app.js?v=20261025-question-studio"></script>
+  <script src="app.js?v=20261025-lobby-brand"></script>
 
 </body>
 </html>

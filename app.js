@@ -42,7 +42,7 @@ function renderAppearance() {
   $("appearanceSelect").value = appearance;
   if (renderedAppearance === appearance) return;
   renderedAppearance = appearance;
-  if (glass) loadOptionalScript("glass.js?v=20261022-face-confirm", "GlassRenderer").then(() => {
+  if (glass) loadOptionalScript("glass.js?v=20261025-liquid-lens", "GlassRenderer").then(() => {
     if (selectedAppearance() === "glass") window.GlassRenderer.start();
   }).catch(error => { console.warn("Glass effects unavailable; using CSS glass.", error); });
   else window.GlassRenderer?.stop();
@@ -126,25 +126,21 @@ function changeForm(value) {
 }
 function controlMode() { return DB.settings.controlMode || "palms"; }
 function setControlMode(value) {
-  const mode = ["palms", "buttons", "tilt"].includes(value) ? value : "palms";
+  const mode = ["palms", "buttons"].includes(value) ? value : "palms";
   DB.settings.controlMode = mode;
-  resetTilt();
   if (typeof stopPalmLoop === "function") stopPalmLoop();
   hideLost();
-  if (mode !== "tilt") clearFaceCanvas();
+  clearFaceCanvas();
   saveDB();
   renderControlMode();
   if (phase === "play" && round && !round.answered) {
     $("feedbackLine").textContent = answerPrompt();
   }
   if (mode === "palms" && stream) ensurePalmLoop();
-  if (mode === "tilt" && stream) loadModels(false);
   ensureDetectionLoop();
 }
 function answerPrompt() {
-  if (controlMode() === "palms" && stream) return "Show a palm to choose.";
-  if (controlMode() === "tilt" && stream) return "Tilt left or right and hold.";
-  return compactView() ? "Tap the correct replacement." : "Click an answer or use the left and right arrow keys.";
+  return "";
 }
 // The visible left/right actions are shared by touch and palm input.
 function palmControlContext() {
@@ -180,6 +176,29 @@ function handlePalmAction(side) {
 function palmCue(side) {
   return `<span class="palm-cue palm-${side}" data-hand="${side === "left" ? "L" : "R"}" role="img" aria-label="${side === "left" ? "Left" : "Right"} palm"></span>`;
 }
+function palmDebugEnabled() {
+  return /(?:^|[?&])palmdebug=1(?:&|$)/.test(window.location?.search || "");
+}
+let palmDebugIncidents = [];
+function savePalmDebugIncident(entry) {
+  if (!palmDebugEnabled() || entry.ok) return;
+  palmDebugIncidents = [...palmDebugIncidents, entry].slice(-5);
+  try { sessionStorage.setItem("palm-debug-incidents", JSON.stringify(palmDebugIncidents)); }
+  catch (error) { console.warn("Palm debug history could not be saved", error); }
+}
+function renderPalmLog() {
+  const list = $("palmLogList");
+  if (!list) return;
+  const log = round?.palmLog || [];
+  const current = log.length ? log.map((entry) => {
+    const raw = entry.raw ? ` · model ${escapeHtml(entry.raw.label)} ${Number(entry.raw.score).toFixed(2)}` : " · tap/keys";
+    const shot = entry.capture?.image ? ` <button class="btn mini" type="button" data-palm-shot="${log.indexOf(entry)}">VIEW FRAME</button>` : "";
+    return `<li>Q${entry.qi + 1} · ${entry.side.toUpperCase()} palm${raw} → picked ${entry.picked === 0 ? "LEFT" : "RIGHT"} · ${entry.ok ? "✓ correct" : "✗ wrong"}${shot}</li>`;
+  }).join("") : "<li>Play a round to record what the tracker saw for each answer.</li>";
+  const saved = palmDebugIncidents.map((entry, index) => `<li>Saved wrong answer · Q${entry.qi + 1} · ${entry.side.toUpperCase()} selected <button class="btn mini" type="button" data-palm-incident="${index}">${entry.capture?.image ? "VIEW FRAME" : "VIEW DETAILS"}</button></li>`).join("");
+  list.innerHTML = current + saved;
+  $("palmDebugDownload").disabled = !log.length && !palmDebugManual && !saved;
+}
 function renderPalmControls() {
   const live = controlMode() === "palms" && Boolean(stream);
   document.body.classList.toggle("palm-navigation", live);
@@ -193,6 +212,94 @@ function renderPalmControls() {
   }
   $("lbAutoHint").classList.toggle("hidden", live);
 }
+let palmDebugSnapshot = null;
+let palmDebugManual = null;
+function showPalmAnswerFrame(index) {
+  showPalmDebugEntry(round?.palmLog?.[index]);
+}
+function showPalmDebugEntry(entry) {
+  if (!entry) return;
+  if (entry.capture?.image) {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = $("palmDebugCanvas");
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.classList.remove("hidden");
+    };
+    image.src = entry.capture.image;
+  } else $("palmDebugCanvas").classList.add("hidden");
+  $("palmDebugConfirmRow").classList.add("hidden");
+  $("palmDebugVerdict").textContent = "";
+  $("palmDebugResult").textContent = `Q${entry.qi + 1}: ${entry.sentence} | LEFT: ${entry.options[0]} | RIGHT: ${entry.options[1]} | Selected ${entry.side.toUpperCase()}; correct option was ${entry.correct === 0 ? "LEFT" : "RIGHT"}.${entry.capture?.image ? "" : " No camera frame was captured."}`;
+}
+function downloadPalmDebugReport() {
+  const entries = round?.palmLog || [];
+  if (!entries.length && !palmDebugManual && !palmDebugIncidents.length) return;
+  const payload = { version: 1, createdAt: new Date().toISOString(), manual: palmDebugManual, entries, savedWrongAnswers: palmDebugIncidents };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `palm-debug-${Date.now()}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function runPalmDebugCapture() {
+  $("palmDebugVerdict").textContent = "";
+  $("palmDebugVerdict").className = "palm-debug-verdict";
+  $("palmDebugConfirmRow").classList.add("hidden");
+  if (!stream) { toast("Turn the camera on first.", "warn"); return; }
+  if (controlMode() !== "palms") { toast("Switch Answer Controls to palms first.", "warn"); return; }
+  const button = $("palmDebugBtn");
+  button.disabled = true;
+  $("palmDebugResult").textContent = "Capturing one frame… hold your palm still.";
+  try {
+    palmDebugSnapshot = await capturePalmDebug();
+    renderPalmDebug(palmDebugSnapshot);
+    if (palmDebugSnapshot) {
+      palmDebugManual = { ...palmDebugSnapshot, image: $("palmDebugCanvas").toDataURL("image/jpeg", 0.85) };
+      $("palmDebugDownload").disabled = false;
+    }
+  } finally { button.disabled = false; }
+}
+function renderPalmDebug(snapshot) {
+  const canvas = $("palmDebugCanvas"), resultEl = $("palmDebugResult");
+  if (!snapshot || !snapshot.count) {
+    canvas.classList.add("hidden");
+    $("palmDebugConfirmRow").classList.add("hidden");
+    resultEl.textContent = snapshot ? "No hand in the frozen frame. Move closer, face your palm to the camera with fingers spread, and capture again."
+      : "Capture failed. Check the camera light and try again.";
+    return;
+  }
+  canvas.classList.remove("hidden");
+  const lines = snapshot.per.map((info, index) => {
+    if (!info) return `Hand ${index + 1}: landmarks unreadable.`;
+    const raw = info.raw ? `${info.raw.label} (${Number(info.raw.score).toFixed(2)})` : "no label";
+    const state = !info.eligible ? "too small" : !info.open ? "fingers closed" : "open";
+    return `Hand ${index + 1}: model says ${raw} → reads as your ${(info.side || "unknown").toUpperCase()} (${state}).`;
+  });
+  resultEl.textContent = `${lines.join(" ")} ${snapshot.answer ? `Would pick the ${snapshot.answer.toUpperCase()} option.` : "Would not pick an option."} Which hand did you raise?`;
+  $("palmDebugConfirmRow").classList.remove("hidden");
+}
+function confirmPalmDebugSide(raised) {
+  const verdictEl = $("palmDebugVerdict");
+  const outcome = PalmInput.diagnose(raised, palmDebugSnapshot);
+  if (outcome.verdict === "match") {
+    verdictEl.className = "palm-debug-verdict good";
+    verdictEl.textContent = `Correct: the tracker read your ${raised.toUpperCase()} hand, so it would pick the ${raised.toUpperCase()} option. Palm mapping is fine — a wrong answer came from the question, not the palm.`;
+  } else if (outcome.verdict === "mismatch") {
+    verdictEl.className = "palm-debug-verdict bad";
+    const raw = outcome.raw ? ` (model raw label ${outcome.raw.label} ${Number(outcome.raw.score).toFixed(2)})` : "";
+    verdictEl.textContent = `INVERTED: you raised ${raised.toUpperCase()} but the tracker read ${String(outcome.computed).toUpperCase()}${raw} and would pick the wrong side. Take a screenshot of the frozen picture for the developer — the handedness swap needs flipping for this setup.`;
+  } else if (outcome.verdict === "none") {
+    verdictEl.className = "palm-debug-verdict";
+    verdictEl.textContent = "No frozen frame yet — tap TEST MY PALM first.";
+  } else {
+    verdictEl.className = "palm-debug-verdict";
+    const why = { "hand-too-small": "your palm was too small — move closer", "hand-not-open": "spread your fingers wide", "two-hands": "show only one palm", "no-side": "face your palm flat to the camera" }[outcome.reason]
+      || "adjust and capture again";
+    verdictEl.textContent = `Unclear reading: ${why}, then tap TEST MY PALM again.`;
+  }
+}
 function renderControlMode() {
   const mode = controlMode();
   document.body.classList.toggle("control-palms", mode === "palms");
@@ -201,8 +308,6 @@ function renderControlMode() {
   setCameraUI();
 }
 const TRACKING_FRESH_MS = 450;
-const NEUTRAL_HOLD_MS = 180;
-const FACE_LOST_MS = 5000;
 const QUESTIONS_PER_ROUND = 8;
 const MAX_CUSTOM_TOPICS = 40;
 const MAX_CUSTOM_QUESTIONS = 60;
@@ -302,9 +407,7 @@ const defaultSettings = {
   music: true,
   extras: true,
   faceResume: true,
-  tiltThreshold: 12,
-  tiltHoldMs: 550,
-  invertTilt: false
+  cameraEnabled: true
 };
 
 function normalizeFaceDescriptor(value) {
@@ -415,10 +518,8 @@ function normalizeDB(raw) {
     for (const key of ["mobileClassAppearance", "mobileSoloAppearance"]) {
       db.settings[key] = ["glass", "lite"].includes(raw.settings[key]) ? raw.settings[key] : "lite";
     }
-    db.settings.controlMode = ["palms", "buttons", "tilt"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
-    db.settings.tiltThreshold = clamp(Number(raw.settings.tiltThreshold) || 12, 8, 24);
-    db.settings.tiltHoldMs = clamp(Number(raw.settings.tiltHoldMs) || 550, 350, 1200);
-    db.settings.invertTilt = raw.settings.invertTilt === true;
+    db.settings.controlMode = ["palms", "buttons"].includes(raw.settings.controlMode) ? raw.settings.controlMode : "palms";
+    db.settings.cameraEnabled = raw.settings.cameraEnabled !== false;
     db.settings.sfx = raw.settings.sfx !== false;
     db.settings.music = raw.settings.music !== false;
     db.settings.extras = raw.settings.extras !== false;
@@ -499,13 +600,9 @@ let pendingFaceResume = null;
 let faceCaptureRequested = false;
 let resumeBlockedStudentId = null;
 const indexingFaces = new Set();
-let detection = { face: false, box: null, roll: 0, student: null, distance: 0 };
-let smoothRoll = null;
+let detection = { face: false, box: null, student: null, distance: 0 };
 let lastTrackingAt = 0;
-let calibrationSamples = [];
-let neutralCalibrated = false;
 let cameraGeneration = 0;
-let baseRoll = 0;
 let phase = "lobby";
 let session = null;
 let activeStudentId = null;
@@ -523,8 +620,6 @@ let sfxGain = null;
 let musicGain = null;
 let musicTimer = null;
 let musicStep = 0;
-let tilt = { armed: false, side: null, since: 0 };
-let lastHudLabel = "";
 let lastIdleStatus = "";
 
 function after(ms, fn) {
@@ -884,17 +979,6 @@ function pointPop(amount) {
   setTimeout(() => pop.remove(), 950);
 }
 
-function setHudStudent(student, label) {
-  const text = student ? "Your turn" : !label || label === "Waiting for player" ? "Palm2Grammar" : label;
-  if (text !== lastHudLabel) {
-    $("hudName").textContent = text;
-    lastHudLabel = text;
-  }
-  $("hudAvatar").innerHTML = student ? avatarInner(student) : "?";
-  const kicker = $("faceCard").querySelector(".hud-kicker");
-  if (kicker) kicker.textContent = student ? "CURRENT PLAYER" : "READY TO PLAY";
-}
-
 function setHudClass() {
   const cls = getCurrentClass();
   if (isHomework()) {
@@ -957,6 +1041,13 @@ function showScreen(name) {
   syncTracking();
   window.scrollTo?.(0, 0);
   $("lobby").parentElement?.scrollTo?.(0, 0);
+  updateLobbyBrand();
+}
+
+function updateLobbyBrand() {
+  const logo = $("lobby").querySelector(".logo-wrap");
+  document.body.classList.toggle("lobby-scrolled",
+    !$("lobby").classList.contains("hidden") && logo?.getBoundingClientRect?.().bottom < 84);
 }
 
 function hideOverlay(id) {
@@ -988,19 +1079,16 @@ function setCameraUI() {
   $("cameraToggleBtn").setAttribute("aria-label", live ? "Stop camera" : "Enable camera");
   $("cameraToggleBtn").setAttribute("aria-pressed", String(live));
   $("cameraToggleBtn").title = live ? "Turn camera off" : "Turn camera on and allow permission";
-  $("calibrateBtn").disabled = !live;
   for (const [id, side] of [["optionLeft", "left"], ["optionRight", "right"]]) {
     const tag = $(id).querySelector(".option-tag");
     if (controlMode() === "palms") tag.innerHTML = palmCue(side);
-    else tag.textContent = controlMode() === "tilt" && live ? `TILT ${side.toUpperCase()}`
-      : compactView() ? `${side.toUpperCase()} ANSWER` : side === "left" ? "TAP OR PRESS ←" : "TAP OR PRESS →";
+    else tag.textContent = side.toUpperCase();
   }
   renderPalmControls();
-  $("camDot").title = live ? "Camera live" : "Camera off";
   document.body.classList.toggle("playing", phase === "play");
   $("cameraNote").textContent = live
     ? "Camera ready for palm control. Photo cards are optional and stay on this device."
-    : "Camera is optional for buttons. Enable it for palm control or photo cards.";
+    : "Camera is off. Turn it on for palm control or photo cards.";
   if (phase === "play" && round && !round.answered) $("feedbackLine").textContent = answerPrompt();
   setModelStatus();
 }
@@ -1008,11 +1096,11 @@ function setCameraUI() {
 function setModelStatus() {
   const el = $("modelStatus");
   if (modelsReady) {
-    el.textContent = recognitionReady ? "Head tracking and local face memory ready." : "Head tracking ready. Face memory loads only for photo players.";
+    el.textContent = recognitionReady ? "Face memory ready." : "Face engine ready. Face memory loads only for photo players.";
   } else if (modelsLoading) {
-    el.textContent = "Loading head tracking…";
+    el.textContent = "Loading face engine…";
   } else {
-    el.textContent = stream ? "Camera live. Load head tracking to use tilt controls." : "Camera off. Tracking loads only when you need it.";
+    el.textContent = stream ? "Camera live. Face engine loads only for photo players." : "Camera off.";
   }
 }
 
@@ -1067,12 +1155,7 @@ async function startCamera() {
     });
     $("camera").srcObject = stream;
     await $("camera").play().catch(() => {});
-    smoothRoll = null;
-    calibrationSamples = [];
-    neutralCalibrated = false;
-    resetTilt();
     setCameraUI();
-    if (controlMode() === "tilt") loadModels(false);
     prepareFaceResume();
     ensureDetectionLoop();
     if (controlMode() === "palms") ensurePalmLoop();
@@ -1091,18 +1174,15 @@ function stopCamera() {
   if (typeof stopPalmLoop === "function") stopPalmLoop();
   resetFaceIdentity();
   cameraGeneration += 1;
-  resetTilt();
   if (detectTimer) clearTimeout(detectTimer);
   detectTimer = null;
   if (stream) (stream.getTracks?.() || []).forEach((track) => track.stop());
   stream = null;
   $("camera").srcObject = null;
-  smoothRoll = null;
   $("playerPreview").getContext("2d").clearRect(0, 0, 160, 160);
-  detection = { face: false, box: null, roll: 0, student: null, distance: 0 };
+  detection = { face: false, box: null, student: null, distance: 0 };
   clearFaceCanvas();
   hideLost();
-  setHudStudent(null, "Waiting for player");
   setCameraUI();
 }
 
@@ -1124,8 +1204,7 @@ function prepareFaceResume() {
 }
 function faceTrackingNeeded() {
   if (!stream || document.hidden || isTeacherOpen() || isStudioOpen() || isShareOpen() || pendingFaceCapture) return false;
-  return phase === "idle" ? !isUiBlocking() && faceRecognitionRequested() && recognitionReady
-    : controlMode() === "tilt" && (phase === "countdown" || phase === "play" && !round?.answered && !isPlayBlocked());
+  return phase === "idle" && !isUiBlocking() && faceRecognitionRequested() && recognitionReady;
 }
 function syncTracking() {
   prepareFaceResume();
@@ -1141,18 +1220,6 @@ function ensureDetectionLoop() {
   }, 30);
 }
 
-function rollFromLandmarks(landmarks) {
-  const left = landmarks.getLeftEye();
-  const right = landmarks.getRightEye();
-  const leftX = left.reduce((sum, point) => sum + point.x, 0) / left.length;
-  const leftY = left.reduce((sum, point) => sum + point.y, 0) / left.length;
-  const rightX = right.reduce((sum, point) => sum + point.x, 0) / right.length;
-  const rightY = right.reduce((sum, point) => sum + point.y, 0) / right.length;
-  // Treat the eye line as an axis, avoiding the ±180° jump at upright.
-  const angle = Math.atan2(rightY - leftY, rightX - leftX) * 180 / Math.PI;
-  return ((angle + 270) % 180) - 90;
-}
-
 async function detectTick() {
   if (detecting || !faceTrackingNeeded()) return;
   detecting = true;
@@ -1162,30 +1229,16 @@ async function detectTick() {
     if (!stream || !modelsReady || !video.videoWidth) {
       handleNoFace();
     } else {
-      let result;
-      if (phase !== "idle" && controlMode() !== "tilt") return;
-      if (phase === "idle") {
-        const faces = await faceapi
-          .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
-          .withFaceLandmarks().withFaceDescriptors();
-        if (generation !== cameraGeneration || !faceTrackingNeeded()) return;
-        if (faces.length !== 1) {
-          handleNoFace();
-          if (faces.length > 1) setIdleStatus("One player at a time · keep other faces out of frame");
-          return;
-        }
-        result = faces[0];
-      } else {
-        result = await faceapi
-          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.35 }))
-          .withFaceLandmarks();
-      }
+      const faces = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.55 }))
+        .withFaceLandmarks().withFaceDescriptors();
       if (generation !== cameraGeneration || !faceTrackingNeeded()) return;
-      if (!result) {
+      if (faces.length !== 1) {
         handleNoFace();
-      } else {
-        handleFace(result);
+        if (faces.length > 1) setIdleStatus("One player at a time · keep other faces out of frame");
+        return;
       }
+      handleFace(faces[0]);
     }
   } catch (error) {
     console.warn("Face detection error", error);
@@ -1196,34 +1249,18 @@ async function detectTick() {
       detectTimer = setTimeout(() => {
         detectTimer = null;
         detectTick();
-      }, phase === "idle" ? 180 : 40);
+      }, 180);
     }
   }
 }
 
 function handleFace(result) {
-  const roll = rollFromLandmarks(result.landmarks);
   const now = performance.now();
-  const gap = now - lastTrackingAt;
-  const alpha = 1 - Math.exp(-Math.min(gap, 500) / 85);
-  smoothRoll = smoothRoll === null || gap > TRACKING_FRESH_MS
-    ? roll : smoothRoll + alpha * (roll - smoothRoll);
   lastTrackingAt = now;
-  if (phase === "countdown" || (phase === "play" && !neutralCalibrated)) {
-    calibrationSamples.push({ roll, at: now });
-    calibrationSamples = calibrationSamples.filter((sample) => now - sample.at < 1100);
-    const values = calibrationSamples.map((sample) => sample.roll).sort((a, b) => a - b);
-    if (values.length >= 4 && now - calibrationSamples[0].at >= 350
-      && values[values.length - 1] - values[0] <= 5) {
-      baseRoll = values[Math.floor(values.length / 2)];
-      neutralCalibrated = true;
-    }
-  }
   if (round) round.lastSeen = Date.now();
   detection = {
     face: true,
     box: result.detection.box,
-    roll: smoothRoll,
     student: null,
     distance: 0
   };
@@ -1232,24 +1269,19 @@ function handleFace(result) {
   drawFaceOverlay(result);
   drawPlayerPreview();
   if (phase === "idle" && !isUiBlocking()) updateFaceIdentity(result, now);
-  if (controlMode() === "tilt" && phase === "play") { updateTilt(now); maybeShowLost(); }
 }
 
 function handleNoFace() {
   if (phase === "idle") resumeBlockedStudentId = null;
-  if (controlMode() === "tilt" && phase === "play") maybeShowLost();
   resetFaceIdentity();
   const wasFace = detection.face;
-  detection = { face: false, box: null, roll: smoothRoll || 0, student: null, distance: 0 };
-  calibrationSamples = [];
-  resetTilt();
+  detection = { face: false, box: null, student: null, distance: 0 };
   clearFaceCanvas();
   $("playerPreview").getContext("2d").clearRect(0, 0, 160, 160);
   if (!wasFace) return;
   if (phase === "idle") {
     setIdleStatus(stream && faceResumeEnabled() ? "Returning players: look at the camera." : stream ? "Look at the camera, then capture your photo" : "New players can start; returning players can tap their card.");
   } else if (phase === "lobby") {
-    setHudStudent(null, "Waiting for player");
   }
 }
 
@@ -1286,26 +1318,6 @@ function setIdleStatus(text) {
   if (text === lastIdleStatus) return;
   lastIdleStatus = text;
   $("idleStatus").textContent = text;
-}
-
-function maybeShowLost() {
-  if (phase !== "play" || !round || !session?.active) {
-    hideLost();
-    return;
-  }
-  if (isPlayBlocked()) {
-    hideLost();
-    return;
-  }
-  if (controlMode() !== "tilt" || !stream || Date.now() < lostContinueUntil) return;
-  const lastSeen = detection.face ? Date.now() : round.lastSeen || 0;
-  if (!detection.face && Date.now() - lastSeen > FACE_LOST_MS && !lostShown) {
-    pauseQuestionTimer();
-    lostShown = true;
-    $("lostSub").textContent = "Your round is paused. The camera will pick you up again.";
-    $("playerLost").classList.remove("hidden");
-    sfx.lost();
-  }
 }
 
 function showLostNow() {
@@ -1556,7 +1568,8 @@ function renderLobby() {
   const top = [...currentStudents()].sort(compareStudents).slice(0, 3);
   $("lobbyTop").innerHTML = top.length
     ? top.map((student) => `<div class="mini-rank-row">${avatarHTML(student)}<b>${student.totalScore || 0} PTS</b></div>`).join("")
-    : '<div class="drawer-meta">Marks will appear here after the first round.</div>';
+    : "";
+  $("lobbyTop").hidden = !top.length;
   $("startBtn").disabled = !cls;
 }
 
@@ -1616,10 +1629,6 @@ function renderTeacherMeta() {
 
 function renderSettings() {
   $("appearanceSelect").value = selectedAppearance();
-  $("tiltSensitivity").value = String(DB.settings.tiltThreshold);
-  $("tiltHold").value = String(DB.settings.tiltHoldMs);
-  $("invertTiltToggle").textContent = DB.settings.invertTilt ? "DIRECTIONS SWAPPED" : "NORMAL DIRECTIONS";
-  $("invertTiltToggle").classList.toggle("on", DB.settings.invertTilt);
   $("faceResumeToggle").setAttribute("aria-pressed", String(DB.settings.faceResume));
   $("faceResumeToggle").textContent = DB.settings.faceResume ? "FACE RESUME ON" : "FACE RESUME OFF";
   $("extrasToggle").setAttribute("aria-pressed", String(DB.settings.extras !== false));
@@ -1809,7 +1818,6 @@ function enterIdle() {
   hideLeaderboard();
   showScreen(isSolo() ? "lobby" : "idle");
   updateSessionHud();
-  setHudStudent(null, "Waiting for player");
   setStreak(0);
   const summary = lastSummary;
   $("idleSub").textContent = summary
@@ -1834,7 +1842,6 @@ function showLobby() {
   showScreen("lobby");
   document.body.classList.remove("in-session");
   setStreak(0);
-  setHudStudent(detection.student || null);
   updateSessionHud();
   refreshAll();
 }
@@ -1912,7 +1919,7 @@ function startNumberedPlayer() {
 function beginPlayer(student) {
   if (!session?.active || phase !== "idle" || !student) return;
   faceCaptureRequested = false;
-  if (controlMode() !== "tilt") clearFaceCanvas();
+  clearFaceCanvas();
   resetFaceIdentity();
   activeStudentId = student.id;
   phase = "countdown";
@@ -1924,17 +1931,10 @@ function beginPlayer(student) {
   countdownPause();
   $("countdownAvatar").innerHTML = avatarInner(student);
   $("countdownName").textContent = "GET READY";
-  calibrationSamples = [];
-  neutralCalibrated = false;
-  smoothRoll = null;
   lastTrackingAt = 0;
-  resetTilt();
   $("countdownHint").textContent = controlMode() === "palms"
     ? "Show a palm to choose. Lower it between choices."
-    : controlMode() === "tilt" && stream
-    ? "Look straight ahead and hold still to set your centre."
     : "Click an answer or use the left and right arrow keys.";
-  setHudStudent(student);
   sfx.start();
   let value = 3;
   const tick = () => {
@@ -2062,6 +2062,7 @@ function startRound(student) {
     redemption: { active: false, q: null, won: false },
     goldenIndex: QUESTIONS_PER_ROUND - 1,
     goldenHit: false,
+    palmLog: [],
     bonusShot: { active: false, q: null },
     bonus: "none",
     newBadges: [],
@@ -2070,13 +2071,11 @@ function startRound(student) {
     pointsThisRound: 0
   };
   // Each turn calibrates from current camera frames.
-  if (!neutralCalibrated) calibrationSamples = [];
-  tilt = { armed: false, side: null, since: 0 };
   hideGameOverlays();
   hideLeaderboard();
   showScreen("play");
   updateSessionHud();
-  setHudStudent(student);
+  renderPalmLog();
   renderQuestion();
   startMusic();
 }
@@ -2089,6 +2088,7 @@ function renderQuestion() {
   const bonus = Boolean(round.bonusShot.active);
   const golden = !redemption && !bonus && extrasEnabled() && round.qi === round.goldenIndex;
   $("questionCounter").textContent = bonus ? "BONUS SHOT" : redemption ? "REDEMPTION SHOT" : `QUESTION ${round.qi + 1} / ${QUESTIONS_PER_ROUND}`;
+  $("questionCounter").classList.toggle("fx-foil", bonus);
   $("questionTopic").textContent = bonus ? "PERFECT BONUS" : String(question.topic || "GRAMMAR").toUpperCase();
   $("redemptionChip").classList.toggle("hidden", !redemption);
   $("redemptionChip").textContent = redemption ? "ONE SHOT · ONE REDEMPTION" : "REDEMPTION READY";
@@ -2098,6 +2098,7 @@ function renderQuestion() {
   const banner = $("goldenBanner");
   banner.classList.toggle("hidden", !golden && !bonus);
   banner.classList.toggle("bonus-banner", bonus);
+  banner.classList.toggle("fx-foil", bonus);
   banner.textContent = bonus ? `BONUS SHOT · +${BONUS_SHOT_POINTS} POINTS` : `GOLDEN QUESTION · ${GOLDEN_MULTIPLIER}× POINTS`;
   $("play").classList.toggle("golden-question", golden);
   $("play").classList.toggle("bonus-question", bonus);
@@ -2105,26 +2106,16 @@ function renderQuestion() {
   $("optionLeftText").textContent = String(question.options?.[0] ?? "");
   $("optionRightText").textContent = String(question.options?.[1] ?? "");
   $("feedbackLine").className = "feedback-line";
-  $("feedbackLine").textContent = bonus
-    ? `One bonus question. A correct answer adds +${BONUS_SHOT_POINTS} points.`
-    : redemption
-      ? "One error this round. Make this shot count."
-      : answerPrompt();
-  $("tiltCaption").textContent = "CENTRE YOUR HEAD";
-  $("play").classList.remove("tilting-left", "tilting-right", "question-enter");
+  $("feedbackLine").textContent = "";
+  $("play").classList.remove("question-enter");
   void $("play").offsetWidth;
   $("play").classList.add("question-enter");
   ["optionLeft", "optionRight"].forEach((id) => {
-    $(id).classList.remove("good", "bad", "dim", "tilt-target");
+    $(id).classList.remove("good", "bad", "dim");
     $(id).querySelector(".option-charge i").style.width = "0%";
   });
-  $("tiltArrowLeft").classList.remove("on");
-  $("tiltArrowRight").classList.remove("on");
-  $("gaugeNeedle").style.left = "50%";
-  $("gaugeNeedle").classList.remove("left", "right");
   round.answered = false;
   round.lastSeen = Date.now();
-  tilt = { armed: false, side: null, since: 0 };
   renderProgress();
   setStreak(round.streak);
   round.questionTimer = { elapsedMs: 0, startedAt: null };
@@ -2178,98 +2169,9 @@ function renderProgress(changedIndex = -1) {
   $("progressDots").innerHTML = dots.join("");
 }
 
-function setCharge(side, ratio) {
-  const left = $("optionLeft");
-  const right = $("optionRight");
-  const amount = clamp(ratio, 0, 1) * 100;
-  left.querySelector(".option-charge i").style.width = side === "left" ? `${amount}%` : "0%";
-  right.querySelector(".option-charge i").style.width = side === "right" ? `${amount}%` : "0%";
-  left.classList.toggle("tilt-target", side === "left" && ratio > 0.02);
-  right.classList.toggle("tilt-target", side === "right" && ratio > 0.02);
-}
-
 function clearCharge() {
   $("optionLeft").querySelector(".option-charge i").style.width = "0%";
   $("optionRight").querySelector(".option-charge i").style.width = "0%";
-  $("optionLeft").classList.remove("tilt-target");
-  $("optionRight").classList.remove("tilt-target");
-  $("tiltArrowLeft").classList.remove("on");
-  $("tiltArrowRight").classList.remove("on");
-  $("play").classList.remove("tilting-left", "tilting-right");
-}
-
-function resetTilt() {
-  tilt = { armed: false, side: null, since: 0, neutralSince: null };
-  clearCharge();
-}
-
-function recalibrateTilt() {
-  calibrationSamples = [];
-  neutralCalibrated = false;
-  resetTilt();
-  toast("Look straight ahead and hold still to set your centre.", "good");
-}
-
-function updateTilt(now) {
-  if (controlMode() !== "tilt") {
-    if (controlMode() === "buttons") $("tiltCaption").textContent = "TAP OR USE ← →";
-    return;
-  }
-  if (phase !== "play" || !round || round.answered || isPlayBlocked() || document.hidden) {
-    resetTilt();
-    return;
-  }
-  const hasFace = detection.face && smoothRoll !== null && now - lastTrackingAt <= TRACKING_FRESH_MS;
-  if (!hasFace || !neutralCalibrated) {
-    resetTilt();
-    $("tiltCaption").textContent = !stream ? "CLICK OR USE ← →" : !hasFace ? "FINDING YOUR FACE" : "LOOK STRAIGHT · HOLD STILL";
-    $("gaugeNeedle").style.left = "50%";
-    $("tiltNeedle").style.transform = "translate(-50%, -100%) rotate(0deg)";
-    $("gaugeNeedle").classList.remove("left", "right");
-    return;
-  }
-  const relative = (DB.settings.invertTilt ? 1 : -1) * (smoothRoll - baseRoll);
-  const threshold = DB.settings.tiltThreshold;
-  const release = threshold * 0.5;
-  const bounded = clamp(relative, -35, 35);
-  $("tiltNeedle").style.transform = `translate(-50%, -100%) rotate(${bounded}deg)`;
-  $("gaugeNeedle").style.left = `${50 + (bounded / 35) * 44}%`;
-  $("gaugeNeedle").classList.toggle("left", relative < -release);
-  $("gaugeNeedle").classList.toggle("right", relative > release);
-  if (!tilt.armed) {
-    if (Math.abs(relative) <= release) {
-      if (tilt.neutralSince == null) tilt.neutralSince = now;
-      if (now - tilt.neutralSince >= NEUTRAL_HOLD_MS) tilt.armed = true;
-    } else tilt.neutralSince = null;
-    clearCharge();
-    $("tiltCaption").textContent = tilt.armed ? "TILT TO CHOOSE" : "RETURN TO CENTRE";
-    return;
-  }
-  let side = relative <= -threshold ? "left" : relative >= threshold ? "right" : null;
-  if (tilt.side === "left" && relative < -release) side = "left";
-  if (tilt.side === "right" && relative > release) side = "right";
-  if (!side) {
-    tilt.side = null;
-    tilt.since = 0;
-    clearCharge();
-    $("tiltCaption").textContent = "TILT TO CHOOSE";
-    return;
-  }
-  if (tilt.side !== side) {
-    tilt.side = side;
-    tilt.since = now;
-  }
-  // Only camera observations can complete a hold; animation frames cannot
-  // submit an answer from a frozen camera image.
-  const held = Math.max(0, lastTrackingAt - tilt.since);
-  const ratio = clamp(held / DB.settings.tiltHoldMs, 0, 1);
-  setCharge(side, ratio);
-  $("play").classList.toggle("tilting-left", side === "left");
-  $("play").classList.toggle("tilting-right", side === "right");
-  $("tiltArrowLeft").classList.toggle("on", side === "left");
-  $("tiltArrowRight").classList.toggle("on", side === "right");
-  $("tiltCaption").textContent = `HOLD ${side.toUpperCase()} · ${Math.round(ratio * 100)}%`;
-  if (held >= DB.settings.tiltHoldMs) answer(side);
 }
 
 function unlockBadge(student, id) {
@@ -2289,13 +2191,23 @@ function answer(side) {
   const elapsedMs = Math.round(round.questionTimer.elapsedMs);
   round.responseTimesMs.push(elapsedMs);
   round.answered = true;
-  tilt.armed = false;
-  tilt.side = null;
-  tilt.since = 0;
   clearCharge();
   const correct = correctIndex(question);
   const chosen = side === "left" ? 0 : 1;
   const ok = chosen === correct;
+  if (!round.palmLog) round.palmLog = [];
+  const lastReading = typeof palmLastReading !== "undefined" ? palmLastReading : null;
+  const freshReading = lastReading && lastReading.side === side && performance.now() - lastReading.at < 2000
+    ? lastReading : null;
+  const palmEntry = { qi: round.qi, side,
+    raw: freshReading ? { label: freshReading.label, score: freshReading.score } : null,
+    picked: chosen, correct, ok,
+    ...(palmDebugEnabled() ? { sentence: question.s, options: [...question.options],
+      capture: typeof palmLastCapture !== "undefined" && palmLastCapture?.side === side
+        && performance.now() - palmLastCapture.at < 2000 ? palmLastCapture : null } : {}) };
+  round.palmLog.push(palmEntry);
+  savePalmDebugIncident(palmEntry);
+  renderPalmLog();
   const bonusShot = Boolean(round.bonusShot?.active);
   const redemption = Boolean(round.redemption.active);
   const golden = !bonusShot && !redemption && extrasEnabled() && round.qi === round.goldenIndex;
@@ -2481,7 +2393,6 @@ function startBonusShot() {
   phase = "play";
   round.answered = false;
   round.lastSeen = Date.now();
-  tilt = { armed: false, side: null, since: 0 };
   updateSessionHud();
   renderQuestion();
   toast("Bonus shot! One question for +250 points.", "good", 2800);
@@ -2494,7 +2405,6 @@ function startRedemption() {
   round.redemption = { active: true, q: question, won: false };
   round.answered = false;
   round.lastSeen = Date.now();
-  tilt = { armed: false, side: null, since: 0 };
   sfx.redemption();
   toast("Exactly one error — ONE redemption shot!", "warn", 3200);
   callout("ONE SHOT", "good");
@@ -2814,6 +2724,7 @@ function openTeacher() {
   renderTeacherMeta();
   renderSettings();
   renderClassSelect();
+  if (palmDebugEnabled()) renderPalmLog();
 }
 
 function closeTeacherPanel() {
@@ -3420,7 +3331,6 @@ async function loadHomeworkFromHash() {
     hideLeaderboard();
     phase = "homework";
     showScreen("homework");
-    setHudStudent(null);
     $("hudClass").textContent = "CUSTOM HOMEWORK · READY";
     updateSessionHud();
   } catch (error) {
@@ -3543,6 +3453,13 @@ async function handleHomeworkHashChange() {
 }
 
 function bindEvents() {
+  window.addEventListener?.("scroll", updateLobbyBrand, { passive: true });
+  $("lobby").parentElement?.addEventListener?.("scroll", updateLobbyBrand, { passive: true });
+  document.body.classList.toggle("palm-debug-mode", palmDebugEnabled());
+  if (palmDebugEnabled()) {
+    try { palmDebugIncidents = JSON.parse(sessionStorage.getItem("palm-debug-incidents") || "[]").slice(-5); }
+    catch { palmDebugIncidents = []; }
+  }
   document.addEventListener("pointerdown", ensureAudio, { capture: true });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -3688,24 +3605,10 @@ function bindEvents() {
     toast(DB.settings.extras ? "Golden question 8 and bonus shots are on." : "Bonus questions are off. Scoring returns to the classic rules.", "good", 3200);
   });
   $("cameraToggleBtn").addEventListener("click", () => {
-    if (stream) stopCamera();
-    else startCamera();
+    if (stream) { DB.settings.cameraEnabled = false; saveDB(); stopCamera(); }
+    else { DB.settings.cameraEnabled = true; saveDB(); startCamera(); }
   });
   $("reloadModelsBtn").addEventListener("click", () => loadModels(true));
-  $("calibrateBtn").addEventListener("click", recalibrateTilt);
-  $("invertTiltToggle").addEventListener("click", () => {
-    DB.settings.invertTilt = !DB.settings.invertTilt;
-    resetTilt();
-    saveDB();
-    renderSettings();
-  });
-  [["tiltSensitivity", "tiltThreshold"], ["tiltHold", "tiltHoldMs"]].forEach(([id, setting]) => {
-    $(id).addEventListener("change", () => {
-      DB.settings[setting] = Number($(id).value);
-      resetTilt();
-      saveDB();
-    });
-  });
   $("fullscreenBtn").addEventListener("click", async () => {
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -3768,10 +3671,19 @@ function bindEvents() {
   });
   $("optionLeft").addEventListener("click", () => answer("left"));
   $("optionRight").addEventListener("click", () => answer("right"));
+  $("palmDebugBtn").addEventListener("click", runPalmDebugCapture);
+  $("palmDebugLeft").addEventListener("click", () => confirmPalmDebugSide("left"));
+  $("palmDebugRight").addEventListener("click", () => confirmPalmDebugSide("right"));
+  $("palmDebugDownload").addEventListener("click", downloadPalmDebugReport);
+  $("palmLogList").addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-palm-shot]");
+    if (button) showPalmAnswerFrame(Number(button.dataset.palmShot));
+    const incident = event.target.closest?.("[data-palm-incident]");
+    if (incident) showPalmDebugEntry(palmDebugIncidents[Number(incident.dataset.palmIncident)]);
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       pauseQuestionTimer();
-      resetTilt();
       if (typeof resetPalm === "function") resetPalm();
       stopMusic();
       syncTracking();
@@ -3793,6 +3705,7 @@ function init() {
   renderControlMode();
   showLobby();
   loadHomeworkFromHash();
+  if (DB.settings.cameraEnabled && window.isSecureContext === true) startCamera();
 }
 
 init();

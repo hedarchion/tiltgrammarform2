@@ -14,7 +14,7 @@
   body { overflow:auto; background:var(--mobile-background); }
   body, button, input, select { -webkit-tap-highlight-color:transparent; }
   button, summary { touch-action:manipulation; }
-  .app { height:auto; min-height:100svh; overflow:hidden; background:var(--mobile-background); }
+  .app { height:auto; min-height:100svh; overflow:clip; background:var(--mobile-background); }
   /* Keep the source video alive for inference without painting a fullscreen feed. */
   .camera-layer { position:fixed; width:1px; height:1px; overflow:hidden; opacity:0; }
   #camera { filter:none; transition:none; }
@@ -30,10 +30,13 @@
   .lost-card::before, .lost-card::after { display:none; }
   .screen { animation:none; }
   .hud {
+    position:sticky; top:0; z-index:55;
     grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px;
     min-height:68px; padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));
     border-bottom:1px solid #253d48;
   }
+  body.lobby-scrolled .hud { background:var(--mobile-background); }
+  body.lobby-scrolled .hud-brand { font-size:clamp(10px,2.8vw,15px); overflow:hidden; text-overflow:ellipsis; }
   .face-card { min-width:0; border:0; padding:0; background:none; gap:8px; border-radius:0; }
   .face-card .face-avatar { width:32px; height:32px; border-radius:10px; font-size:10px; background:#20473e; border-color:#3a6657; }
   .hud-kicker, .cam-dot, .hud-center, #fullscreenBtn { display:none; }
@@ -119,14 +122,12 @@
   .option-card.bad { background:#5d2b36; border-color:#ffaab6; box-shadow:inset 0 0 0 2px #ffaab6; }
   .option-card.dim { opacity:.6; }
   .option-charge { height:4px; }
-  .tilt-meter { grid-row:4; grid-column:1/-1; max-width:none; width:100%; justify-self:stretch; padding:0; }
+  .palm-monitor { grid-row:4; grid-column:1/-1; max-width:none; width:100%; justify-self:stretch; padding:0; }
   .control-palms .palm-monitor { display:grid; grid-template-columns:112px minmax(0,1fr); align-items:center; gap:12px; text-align:left; }
   #palmPreview { width:112px; height:63px; border-radius:10px; border:1px solid #49616b; }
   #palmStatus { margin:0; min-height:0; color:var(--muted); font-size:12px; line-height:1.4; }
   #palmInstantHint { display:none; }
-  .camera-off.control-palms .tilt-meter, .control-buttons .tilt-meter { display:none; }
-  .tilt-ring { width:42px; }
-  .tilt-caption { font:800 12px var(--body); }
+  .camera-off.control-palms .palm-monitor, .control-buttons .palm-monitor { display:none; }
   .play-footer { grid-row:5; grid-column:1/-1; display:block; min-height:44px; padding:0 2px; }
   .feedback-line { min-height:0; text-align:left; font-size:13px; line-height:1.5; }
   .feedback-line.good { color:#a8f1ca; }
@@ -158,6 +159,7 @@
   .bonus-card { border-color:#8e7c4e; }
   .bonus-kicker { font:900 11px var(--body); letter-spacing:.08em; color:var(--yellow); }
   .bonus-title { font:900 28px var(--body); margin:8px 0; }
+  .bonus-title.fx-foil { font:600 28px/1.05 "JetBrains Mono", monospace; letter-spacing:.08em; }
   .bonus-sub { font-size:14px; line-height:1.5; margin-bottom:16px; }
   .round-best { font:900 9px var(--body); letter-spacing:.05em; margin-top:6px; }
   .round-badges { gap:6px; margin-bottom:12px; }
@@ -245,7 +247,7 @@
   .option-card.right { grid-column:3; grid-row:2; }
   .option-card { min-height:100px; padding:14px 10px; }
   .option-text { font-size:clamp(22px,3vw,30px); }
-  .tilt-meter { grid-column:2/4; grid-row:3; }
+  .palm-monitor { grid-column:2/4; grid-row:3; }
   .control-palms .palm-monitor { grid-template-columns:80px 1fr; }
   #palmPreview { width:80px; height:45px; }
   .play-footer { grid-column:1/-1; grid-row:4; min-height:24px; }

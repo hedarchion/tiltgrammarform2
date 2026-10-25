@@ -6,9 +6,9 @@ const css = readFileSync('styles.css', 'utf8');
 const settingsMarkup = html.slice(html.indexOf('<aside class="drawer"'),html.indexOf('</aside>'));
 const palmFlip = css.match(/\.palm-(left|right)::before,\s*\.palm-nav\[data-palm="(left|right)"\]::before\s*\{\s*transform:\s*scaleX\(-1\);\s*\}/);
 assert.ok(palmFlip, 'palm cues define one mirrored side');
-assert.equal(palmFlip[1], 'right', 'the unflipped base illustration is the left palm');
-assert.equal(palmFlip[2], 'right', 'right palm navigation uses the mirrored illustration');
-for (const id of ['formSelect','controlModeSelect','tiltSensitivity','tiltHold','invertTiltToggle','calibrateBtn','soundToggle','musicToggle']) {
+assert.equal(palmFlip[1], 'left', 'the mirrored illustration is the left palm');
+assert.equal(palmFlip[2], 'left', 'left palm navigation uses the mirrored illustration');
+for (const id of ['formSelect','controlModeSelect','soundToggle','musicToggle']) {
   assert.ok(settingsMarkup.includes(`id="${id}"`),`${id} belongs in settings`);
   assert.equal(html.split(`id="${id}"`).length-1,1,`${id} is not duplicated on the player screen`);
 }
@@ -40,7 +40,7 @@ const faceapi = { nets: {
   faceRecognitionNet: { async loadFromUri() { modelLoads.push('recognition'); } }
 } };
 const context = vm.createContext({
-  console, performance: { now: () => 1000 }, window: { faceapi, GlassRenderer: { start() {}, stop() {} } }, faceapi,
+  console: { ...console, warn() {} }, performance: { now: () => 1000 }, window: { faceapi, GlassRenderer: { start() {}, stop() {} } }, faceapi,
   navigator: { mediaDevices: { getUserMedia() { cameraCalls++; throw new Error('Camera must stay optional'); } } },
   localStorage: { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) },
   setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 2; }, clearInterval() {}, requestAnimationFrame() { animationRequests++; },
@@ -54,6 +54,14 @@ run(readFileSync('questions.js', 'utf8'));
 run(readFileSync('questions-form1.js', 'utf8'));
 run(readFileSync('app.js', 'utf8').replace(/init\(\);\s*$/, ''));
 run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos = async () => {}; init();');
+run('window.isSecureContext=true; DB.settings.cameraEnabled=true; init();');
+assert.equal(cameraCalls, 1, 'secure startup requests camera access');
+run('DB.settings.cameraEnabled=false; init();');
+assert.equal(cameraCalls, 1, 'camera off preference prevents a later startup request');
+run('saveDB(); DB=loadDB();');
+assert.equal(run('DB.settings.cameraEnabled'), false, 'camera off preference survives reload');
+run('window.isSecureContext=false; DB.settings.cameraEnabled=true;');
+cameraCalls = 0;
 assert.equal(run('QUESTION_BANK.length'), 1000);
 assert.deepEqual(modelLoads, [], 'home screen never loads face models');
 assert.equal(animationRequests, 0, 'home screen has no app animation loop');
@@ -85,7 +93,6 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.equal(run('currentStudents().length'), 1);
   assert.equal(run('currentStudents()[0].photo'), 'data:image/jpeg;base64,dGVzdA==');
   assert.equal(run('phase'), 'countdown');
-  assert.equal(run('neutralCalibrated'), false, 'turn requires fresh calibration');
   assert.ok(!run('"name" in currentStudents()[0]'), 'photo identity needs no name');
   run('startRound(currentStudents()[0]);');
   assert.equal(run('round.qs.length'), 8);
@@ -393,10 +400,10 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   assert.ok(!html.includes('id="lbEvery"'), 'automatic leaderboard interval is fixed at three turns');
   assert.ok(html.includes('<h1 class="logo">Palm2Grammar</h1>'));
   console.log('Passed: Glass/Lite defaults, per-mode preferences, persistence, live switching and shared game data.');
-  // Head tilt needs two small models; recognition is a separate, later request.
+  // Photo matching loads recognition separately from face detection.
   run('stream=null; modelsReady=false; recognitionReady=false; faceCaptureRequested=false;');
   await run('loadModels(false);');
-  assert.deepEqual(modelLoads.slice(3), ['detector', 'landmarks'], 'head tracking does not load face recognition');
+  assert.deepEqual(modelLoads.slice(3), ['detector', 'landmarks'], 'face detection does not load recognition');
   run('faceCaptureRequested=true;');
   await run('loadModels(false);');
   assert.deepEqual(modelLoads.slice(3), ['detector', 'landmarks', 'recognition'], 'photo matching adds only its missing model');
@@ -412,9 +419,9 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   run('closeTeacherPanel(); hideGameOverlays(); phase="play"; round={answered:false}; DB.settings.controlMode="palms";');
   assert.equal(run('faceTrackingNeeded()'), false, 'palm play never runs the face tracker');
   run('DB.settings.controlMode="tilt";');
-  assert.equal(run('faceTrackingNeeded()'), true);
-  run('round.answered=true;');
-  assert.equal(run('faceTrackingNeeded()'), false, 'head tracking stops during answer feedback');
+  assert.equal(run('normalizeDB({settings:{controlMode:"tilt"}}).settings.controlMode'), 'palms', 'legacy head tilt mode migrates to palms');
+  assert.equal(run('faceTrackingNeeded()'), false, 'gameplay does not run face detection');
+  run('DB.settings.controlMode="palms";');
   assert.equal(animationRequests, 0, 'play and settings never start an animation loop');
   // Replaying a class player has no per-player cap and shares the three-turn cadence.
   run('stream=null; abortSession(); DB=normalizeDB(null); DB.settings.music=false; DB.settings.sfx=false; createClass("Repeat turns"); startSession(); startNumberedPlayer();');
@@ -539,6 +546,7 @@ assert.ok(!('name' in migrated.classes.old.students[0]), 'legacy names are remov
   const gesture = side => {
     context.palmResult = {multiHandLandmarks:side?[openPalm]:[],
       multiHandedness:side?[{label:side==='left'?'Right':'Left',score:.99}]:[]};
+    run('palmRequestGeneration=palmGeneration; handlePalmResults(palmResult);');
     run('palmRequestGeneration=palmGeneration; handlePalmResults(palmResult);');
   };
   gesture(null); gesture('right');
