@@ -57,8 +57,9 @@ your own grammar topics. Built-in Form 1 and Form 2 sets are read-only; duplicat
 one into **My topics**, or create a topic from scratch. Each custom topic has a
 name, a form level and its own question list.
 
-The question editor asks for the sentence before and after the blank, two answer
-options, which option is correct, and an optional explanation. It shows a live
+The question editor asks for the sentence around a wrong word or phrase, two answer
+options, which option corrects it, and an optional explanation. The wrong text appears
+underlined in the sentence. It shows a live
 preview of the game card while you type. Questions can be edited or deleted at any
 time. Custom topics and their questions are saved in this browser's
 `localStorage`; nothing is uploaded.

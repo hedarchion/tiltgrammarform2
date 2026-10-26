@@ -32,7 +32,7 @@ function element(hidden = false) {
 
 const nodes = new Map([...html.matchAll(/<[^>]*\bid="([^"]+)"[^>]*>/g)]
   .map(match => [match[1], element(/class="[^"]*\bhidden\b/.test(match[0]))]));
-for (const id of ['studioTopicName', 'studioTopicForm', 'studioQBefore', 'studioQAfter',
+for (const id of ['studioTopicName', 'studioTopicForm', 'studioQBefore', 'studioQAfter', 'studioQWrong',
   'studioQOptionA', 'studioQOptionB', 'studioQCorrect', 'studioQTip']) {
   nodes.set(id, element());
 }
@@ -121,6 +121,7 @@ run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos =
     run('startStudioQuestion();');
     nodes.get('studioQBefore').value = 'Aina';
     nodes.get('studioQAfter').value = `to the library ${index}.`;
+    nodes.get('studioQWrong').value = 'walk';
     nodes.get('studioQOptionA').value = 'walked';
     nodes.get('studioQOptionB').value = 'walking';
     nodes.get('studioQCorrect').value = String(index % 2);
@@ -128,8 +129,8 @@ run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos =
     run('saveStudioQuestion();');
   }
   assert.equal(run('DB.customTopics[0].questions.length'), 8);
-  assert.equal(run('DB.customTopics[0].questions[0].w'), '');
-  assert.match(run('sentenceMarkup(DB.customTopics[0].questions[0])'), /blank-slot/);
+  assert.equal(run('DB.customTopics[0].questions[0].w'), 'walk');
+  assert.match(run('sentenceMarkup(DB.customTopics[0].questions[0])'), /error-word[^>]*>walk/);
   assert.equal(run('DB.customTopics[0].questions[1].answer'), 1);
 
   run('saveDB();');
@@ -143,6 +144,7 @@ run('var actualIndexSavedFacePhotos=indexSavedFacePhotos; indexSavedFacePhotos =
   const decoded = await codec.decode(token);
   assert.equal(decoded.title, 'Homework Test Set');
   assert.equal(decoded.questions.length, 8);
+  assert.equal(decoded.questions[0].w, 'walk');
 
   navigate(link);
   await run('loadHomeworkFromHash();');

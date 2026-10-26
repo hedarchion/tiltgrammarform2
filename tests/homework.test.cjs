@@ -2,9 +2,9 @@ const assert = require('node:assert/strict');
 const homework = require('../homework.js');
 
 const questions = [
-  { s: 'Aina {x} to the library yesterday.', options: ['walked', 'walking'], answer: 0, tip: 'Past simple.' },
-  { s: 'The boys {x} football when it rained.', options: ['played', 'were playing'], answer: 1, tip: 'Past continuous.' },
-  { s: 'She has {x} her homework.', options: ['finish', 'finished'], answer: 1, tip: '' }
+  { s: 'Aina {x} to the library yesterday.', w: 'walk', options: ['walked', 'walking'], answer: 0, tip: 'Past simple.' },
+  { s: 'The boys {x} football when it rained.', w: 'play', options: ['played', 'were playing'], answer: 1, tip: 'Past continuous.' },
+  { s: 'She has {x} her homework.', w: 'finishes', options: ['finish', 'finished'], answer: 1, tip: '' }
 ];
 
 (async () => {

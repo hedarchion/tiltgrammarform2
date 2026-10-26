@@ -454,7 +454,7 @@ function normalizeCustomQuestion(raw, topicId) {
     patternId: typeof raw?.patternId === "string" && raw.patternId.length < 100
       ? raw.patternId : `custom:${topicId}`,
     s: sentence,
-    w: typeof raw?.w === "string" ? cleanCustomText(raw.w, 80) : "",
+    w: cleanCustomText(raw?.w || options[1 - answer], 80),
     c: options[answer],
     f: options[1 - answer],
     options,
@@ -2812,13 +2812,13 @@ function composeStudioSentence(before, after) {
   return `${left} {x}${/^[,.;:!?)]/.test(right) ? "" : " "}${right}`;
 }
 
-function studioPreviewMarkup(before, after, optionA, optionB, correct, tip) {
+function studioPreviewMarkup(before, after, wrong, optionA, optionB, correct, tip) {
   const sentence = composeStudioSentence(before, after);
   const options = [cleanCustomText(optionA, 120) || "Option A", cleanCustomText(optionB, 120) || "Option B"];
   const answer = Number(correct) === 1 ? 1 : 0;
   return `<div class="studio-preview-card">
     <div class="studio-preview-kicker">LIVE PREVIEW</div>
-    <p class="studio-preview-sentence">${sentenceMarkup({ s: sentence || "{x}", w: "" })}</p>
+    <p class="studio-preview-sentence">${sentenceMarkup({ s: sentence || "{x}", w: cleanCustomText(wrong, 80) || "wrong word" })}</p>
     <div class="studio-preview-options">
       ${options.map((option, index) => `<span class="${index === answer ? "correct" : ""}"><b>${index === 0 ? "A" : "B"}</b>${escapeHtml(option)}${index === answer ? "<i>correct</i>" : ""}</span>`).join("")}
     </div>
@@ -2832,6 +2832,7 @@ function updateStudioPreview() {
   preview.innerHTML = studioPreviewMarkup(
     $("studioQBefore")?.value,
     $("studioQAfter")?.value,
+    $("studioQWrong")?.value,
     $("studioQOptionA")?.value,
     $("studioQOptionB")?.value,
     $("studioQCorrect")?.value,
@@ -2869,11 +2870,14 @@ function renderStudioQuestionEditor(set, draft) {
     <div class="studio-panel-kicker">${draft.id ? "EDIT QUESTION" : "NEW QUESTION"}</div>
     <h3>${draft.id ? "Change this question" : "Write the next question"}</h3>
     <div class="studio-form-grid">
-      <label class="studio-field">BEFORE THE BLANK
+      <label class="studio-field">BEFORE THE WRONG WORD
         <textarea class="text-input" id="studioQBefore" rows="2" maxlength="500" placeholder="Aina">${escapeHtml(draft.before)}</textarea>
       </label>
-      <label class="studio-field">AFTER THE BLANK
+      <label class="studio-field">AFTER THE WRONG WORD
         <textarea class="text-input" id="studioQAfter" rows="2" maxlength="500" placeholder="to the library yesterday.">${escapeHtml(draft.after)}</textarea>
+      </label>
+      <label class="studio-field">WRONG WORD OR PHRASE · UNDERLINED
+        <input class="text-input" id="studioQWrong" type="text" maxlength="80" value="${escapeHtml(draft.wrong || "")}" placeholder="walk" autocomplete="off">
       </label>
       <label class="studio-field">OPTION A
         <input class="text-input" id="studioQOptionA" type="text" maxlength="120" value="${escapeHtml(draft.optionA)}" placeholder="walked" autocomplete="off">
@@ -2891,7 +2895,7 @@ function renderStudioQuestionEditor(set, draft) {
         <input class="text-input" id="studioQTip" type="text" maxlength="400" value="${escapeHtml(draft.tip)}" placeholder="Use the past simple for a completed action." autocomplete="off">
       </label>
     </div>
-    <div id="studioQPreview">${studioPreviewMarkup(draft.before, draft.after, draft.optionA, draft.optionB, draft.correct, draft.tip)}</div>
+    <div id="studioQPreview">${studioPreviewMarkup(draft.before, draft.after, draft.wrong, draft.optionA, draft.optionB, draft.correct, draft.tip)}</div>
     <div class="studio-panel-actions">
       <button class="btn primary compact" type="button" data-action="save-question">SAVE QUESTION</button>
       <button class="btn ghost compact" type="button" data-action="cancel-question">CANCEL</button>
@@ -3084,7 +3088,7 @@ function duplicateStudioSet() {
   }
   const topicId = makeId("topic");
   const questions = set.questions.slice(0, MAX_CUSTOM_QUESTIONS).map(question => {
-    const normalized = normalizeCustomQuestion({ ...question, w: "" }, topicId);
+    const normalized = normalizeCustomQuestion(question, topicId);
     if (!normalized) return null;
     return { ...normalized, id: makeId("cq"), patternId: `custom:${topicId}` };
   }).filter(Boolean);
@@ -3117,7 +3121,7 @@ function startStudioQuestion() {
     return;
   }
   studioState.topicDraft = null;
-  studioState.questionDraft = { id: "", before: "", after: "", optionA: "", optionB: "", correct: 0, tip: "" };
+  studioState.questionDraft = { id: "", before: "", after: "", wrong: "", optionA: "", optionB: "", correct: 0, tip: "" };
   renderStudio();
   $("studioQBefore")?.focus();
 }
@@ -3134,6 +3138,7 @@ function editStudioQuestion(questionId) {
     id: question.id,
     before: pieces[0] || "",
     after: pieces.slice(1).join("{x}") || "",
+    wrong: question.w || "",
     optionA: question.options?.[0] || "",
     optionB: question.options?.[1] || "",
     correct: question.answer === 1 ? 1 : 0,
@@ -3153,7 +3158,7 @@ function saveStudioQuestion() {
   const after = $("studioQAfter")?.value || "";
   const sentence = composeStudioSentence(before, after);
   if (!sentence) {
-    toast("Add the sentence around the blank.", "warn");
+    toast("Add the sentence around the wrong word.", "warn");
     $("studioQBefore")?.focus();
     return;
   }
@@ -3164,6 +3169,12 @@ function saveStudioQuestion() {
   }
   const optionA = cleanCustomText($("studioQOptionA")?.value, 120);
   const optionB = cleanCustomText($("studioQOptionB")?.value, 120);
+  const wrong = cleanCustomText($("studioQWrong")?.value, 80);
+  if (!wrong) {
+    toast("Add the wrong word or phrase to underline.", "warn");
+    $("studioQWrong")?.focus();
+    return;
+  }
   if (!optionA || !optionB) {
     toast("Both answer options are needed.", "warn");
     (!optionA ? $("studioQOptionA") : $("studioQOptionB"))?.focus();
@@ -3184,7 +3195,7 @@ function saveStudioQuestion() {
     id: draft.id || makeId("cq"),
     patternId: `custom:${topic.id}`,
     s: sentence,
-    w: "",
+    w: wrong,
     c: options[answer],
     f: options[1 - answer],
     options,
@@ -3298,7 +3309,7 @@ function buildHomeworkQuestions(set) {
       patternId: `homework:${batch}`,
       topic: set.topic,
       s: question.s,
-      w: "",
+      w: question.w || "",
       c: options[answer],
       f: options[1 - answer],
       options,
@@ -3396,7 +3407,7 @@ function savePendingHomework() {
   const topicId = makeId("topic");
   const name = uniqueCustomName(pendingHomework.title || pendingHomework.topic);
   const questions = pendingHomework.questions.slice(0, MAX_CUSTOM_QUESTIONS).map(question => {
-    const normalized = normalizeCustomQuestion({ ...question, w: "" }, topicId);
+    const normalized = normalizeCustomQuestion(question, topicId);
     return normalized ? { ...normalized, id: makeId("cq"), patternId: `custom:${topicId}` } : null;
   }).filter(Boolean);
   if (!questions.length) {
@@ -3651,7 +3662,7 @@ function bindEvents() {
     else if (action === "cancel-question") { studioState.questionDraft = null; renderStudio(); }
     else if (action === "share-topic") openHomeworkShare();
   });
-  const studioPreviewEvents = ["studioQBefore", "studioQAfter", "studioQOptionA", "studioQOptionB", "studioQCorrect", "studioQTip"];
+  const studioPreviewEvents = ["studioQBefore", "studioQAfter", "studioQWrong", "studioQOptionA", "studioQOptionB", "studioQCorrect", "studioQTip"];
   for (const type of ["input", "change"]) {
     $("studioMain").addEventListener(type, (event) => {
       if (studioPreviewEvents.includes(event.target.id)) updateStudioPreview();

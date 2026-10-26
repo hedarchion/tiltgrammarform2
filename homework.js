@@ -24,10 +24,12 @@
       || options.length !== 2 || !options[0] || !options[1] || options[0] === options[1]) {
       return null;
     }
+    const answer = raw?.answer === 1 ? 1 : 0;
     return {
       s: sentence,
+      w: text(raw?.w || options[1 - answer], 80),
       options,
-      answer: raw?.answer === 1 ? 1 : 0,
+      answer,
       tip: text(raw?.tip, MAX_TIP)
     };
   }
@@ -92,7 +94,7 @@
       n: set.title,
       t: set.topic,
       f: set.form,
-      q: set.questions.map(question => [question.s, question.options[0], question.options[1], question.answer, question.tip])
+      q: set.questions.map(question => [question.s, question.options[0], question.options[1], question.answer, question.tip, question.w])
     };
     const plain = utf8Bytes(JSON.stringify(payload));
     let packed = null;
@@ -124,7 +126,7 @@
       topic: payload.t,
       form: payload.f,
       questions: payload.q.map(row => Array.isArray(row)
-        ? { s: row[0], options: [row[1], row[2]], answer: row[3], tip: row[4] }
+        ? { s: row[0], options: [row[1], row[2]], answer: row[3], tip: row[4], w: row[5] }
         : row)
     }) || (() => { throw new Error("This homework link has no valid questions."); })();
   }
